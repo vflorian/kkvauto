@@ -1,0 +1,638 @@
+<!doctype html>
+<html lang="hu">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>KKVauto – Riportok, adatfeldolgozás és automatizálás kisvállalkozásoknak</title>
+    <meta
+      name="description"
+      content="Automatikus riportok, Excel- és CSV-adatfeldolgozás, rendszerek összekötése és adminisztrációs automatizálás magyar kis- és középvállalkozásoknak. Egy jól körülhatárolt feladattal kezdünk."
+    />
+    <link rel="canonical" href="https://kkvauto.hu/" />
+    <meta name="theme-color" content="#f7f6f2" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="hu_HU" />
+    <meta property="og:site_name" content="KKVauto" />
+    <meta property="og:url" content="https://kkvauto.hu/" />
+    <meta property="og:title" content="KKVauto – A kézzel ismételt feladatokból működő automatizálás" />
+    <meta
+      property="og:description"
+      content="Riportok, adatfeldolgozás és rendszerek összekötése magyar kisvállalkozásoknak. Egy konkrét feladattal kezdünk, a működésedhez igazítva."
+    />
+    <meta property="og:image" content="https://kkvauto.hu/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="KKVauto: Excel- és CSV-fájlokból ellenőrzött, összesített riport" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="KKVauto – A kézzel ismételt feladatokból működő automatizálás" />
+    <meta
+      name="twitter:description"
+      content="Riportok, adatfeldolgozás és rendszerek összekötése magyar kisvállalkozásoknak."
+    />
+    <meta name="twitter:image" content="https://kkvauto.hu/og-image.png" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "ProfessionalService",
+        "name": "KKVauto",
+        "url": "https://kkvauto.hu/",
+        "description": "Automatikus riportok, adatfeldolgozás, rendszerintegráció és egyedi ügyviteli alkalmazások magyar kis- és középvállalkozásoknak.",
+        "areaServed": "HU",
+        "inLanguage": "hu",
+        "founder": { "@type": "Person", "name": "Florian Viglas" }
+      }
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#fooldal">Ugrás a tartalomra</a>
+
+    <header class="site-header" id="teteje">
+      <div class="container header-inner">
+        <a class="logo" href="#teteje" aria-label="KKVauto – vissza az oldal tetejére">
+          KKV<span>auto</span>
+        </a>
+
+        <button
+          class="nav-toggle"
+          type="button"
+          aria-expanded="false"
+          aria-controls="fomenu"
+          data-nav-toggle
+        >
+          <span class="nav-toggle-bars" aria-hidden="true"></span>
+          <span class="sr-only">Menü</span>
+        </button>
+
+        <nav class="main-nav" id="fomenu" aria-label="Fő navigáció" data-nav>
+          <ul>
+            <li><a href="#megoldasok">Megoldások</a></li>
+            <li><a href="#bemutato">Bemutató</a></li>
+            <li><a href="#egyuttmukodes">Együttműködés</a></li>
+            <li><a href="#kapcsolat">Kapcsolat</a></li>
+          </ul>
+          <a class="btn btn-primary btn-sm" href="#kapcsolat" data-track-cta="header">
+            Megnézzük, automatizálható-e?
+          </a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="fooldal" tabindex="-1">
+      <!-- NYITÓ -->
+      <section class="hero" aria-labelledby="hero-cim">
+        <div class="container hero-grid">
+          <div class="hero-copy">
+            <p class="eyebrow">Automatizálás magyar kis- és középvállalkozásoknak</p>
+            <h1 id="hero-cim">A kézzel ismételt feladatokból működő automatizálás.</h1>
+            <p class="lead">
+              Riportok, adatfeldolgozás és rendszerek összekötése magyar kisvállalkozásoknak. Egy
+              konkrét feladattal kezdünk, a működésedhez igazítva.
+            </p>
+            <div class="hero-actions">
+              <a class="btn btn-primary btn-lg" href="#kapcsolat" data-track-cta="hero">
+                Megnézzük, automatizálható-e?
+              </a>
+              <a class="btn btn-secondary btn-lg" href="#feladatok" data-track-cta="hero-examples">
+                Megnézem a példákat
+              </a>
+            </div>
+            <ul class="hero-points" aria-label="Amivel dolgozunk">
+              <li>Excel és CSV</li>
+              <li>Meglévő üzleti programok</li>
+              <li>Python, RPA, API</li>
+            </ul>
+          </div>
+
+          <figure class="flow" aria-labelledby="flow-leiras">
+            <figcaption id="flow-leiras" class="sr-only">
+              Munkafolyamat: három Excel- és CSV-fájl beolvasása, az adatok ellenőrzése és
+              összesítése, majd az elkészült riport.
+            </figcaption>
+
+            <div class="flow-step flow-files" aria-hidden="true">
+              <p class="flow-label"><span>1</span> Beérkező fájlok</p>
+              <div class="file-chip"><span class="file-ext xlsx">XLSX</span>ertekesites_buda.xlsx</div>
+              <div class="file-chip"><span class="file-ext csv">CSV</span>ertekesites_pest.csv</div>
+              <div class="file-chip"><span class="file-ext csv">CSV</span>webshop_export.csv</div>
+            </div>
+
+            <div class="flow-connector" aria-hidden="true"><span></span></div>
+
+            <div class="flow-step flow-check" aria-hidden="true">
+              <p class="flow-label"><span>2</span> Ellenőrzés és összesítés</p>
+              <ul>
+                <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" /></svg>Oszlopok egységesítése</li>
+                <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" /></svg>Ismétlődő sorok kiszűrése</li>
+                <li><svg viewBox="0 0 16 16"><path d="M3 8.5l3 3 7-7" /></svg>Hiányzó adatok jelölése</li>
+                <li class="warn"><svg viewBox="0 0 16 16"><path d="M8 3.5v5.5M8 12v.5" /></svg>Eltérések külön listán</li>
+              </ul>
+            </div>
+
+            <div class="flow-connector" aria-hidden="true"><span></span></div>
+
+            <div class="flow-step flow-report" aria-hidden="true">
+              <p class="flow-label"><span>3</span> Elkészült riport</p>
+              <div class="report-card">
+                <div class="report-head">
+                  <strong>Heti összesítő</strong>
+                  <span class="badge-ok">Kész</span>
+                </div>
+                <svg class="report-chart" viewBox="0 0 220 80" role="presentation">
+                  <line x1="0" y1="79" x2="220" y2="79" />
+                  <rect x="10" y="30" width="28" height="49" rx="3" />
+                  <rect x="52" y="14" width="28" height="65" rx="3" />
+                  <rect x="94" y="42" width="28" height="37" rx="3" />
+                  <rect x="136" y="22" width="28" height="57" rx="3" />
+                  <rect x="178" y="50" width="28" height="29" rx="3" class="alt" />
+                </svg>
+                <div class="report-rows">
+                  <span></span><span></span><span></span>
+                </div>
+              </div>
+            </div>
+          </figure>
+        </div>
+      </section>
+
+      <!-- FELADATVÁLASZTÓ -->
+      <section class="section section-tint" id="feladatok" aria-labelledby="feladatok-cim">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Honnan induljunk?</p>
+            <h2 id="feladatok-cim">Mi viszi el az idődet?</h2>
+            <p class="section-lead">Válaszd ki, melyik ismerős. Mutatunk egy jellemző példát, és hogy mivel kezdhetnénk.</p>
+          </div>
+
+          <div class="task-grid" role="group" aria-label="Feladattípusok" data-task-picker>
+            <button class="task-card" type="button" aria-pressed="false" aria-controls="feladat-pelda" data-task="riport">
+              <span class="task-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+              </span>
+              <span class="task-title">Riportokat készítek kézzel.</span>
+            </button>
+            <button class="task-card" type="button" aria-pressed="false" aria-controls="feladat-pelda" data-task="integracio">
+              <span class="task-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="2" y="4" width="8" height="7" rx="1.5" /><rect x="14" y="13" width="8" height="7" rx="1.5" /><path d="M10 7.5h4a2 2 0 0 1 2 2V13M14 16.5h-4a2 2 0 0 1-2-2V11" /></svg>
+              </span>
+              <span class="task-title">Adatokat másolok több rendszer között.</span>
+            </button>
+            <button class="task-card" type="button" aria-pressed="false" aria-controls="feladat-pelda" data-task="adminisztracio">
+              <span class="task-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M4 4h16v12H8l-4 4z" /><path d="M8 9h8M8 12h5" /></svg>
+              </span>
+              <span class="task-title">Megkereséseket és dokumentumokat követek.</span>
+            </button>
+            <button class="task-card" type="button" aria-pressed="false" aria-controls="feladat-pelda" data-task="alkalmazas">
+              <span class="task-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2" /><path d="M3 9h18M9 9v12" /></svg>
+              </span>
+              <span class="task-title">Kinőttük a táblázatos nyilvántartást.</span>
+            </button>
+          </div>
+
+          <div class="task-detail" id="feladat-pelda" aria-live="polite" data-task-detail hidden></div>
+        </div>
+      </section>
+
+      <!-- MEGOLDÁSOK -->
+      <section class="section" id="megoldasok" aria-labelledby="megoldasok-cim">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Megoldások</p>
+            <h2 id="megoldasok-cim">Konkrét feladatok, konkrét eredménnyel.</h2>
+            <p class="section-lead">
+              Az eszközt – Python, RPA vagy API-integráció – mindig a feladathoz választjuk. Ez a
+              három terület, ahol a legtöbb kézi munka szokott lenni.
+            </p>
+          </div>
+
+          <div class="solution-list">
+            <article class="solution" aria-labelledby="megoldas-1">
+              <header class="solution-head">
+                <span class="solution-num" aria-hidden="true">01</span>
+                <h3 id="megoldas-1">Automatikus riport és adatfeldolgozás</h3>
+              </header>
+              <dl class="solution-grid">
+                <div>
+                  <dt>Most így megy</dt>
+                  <dd>Minden héten vagy hónapban több Excel- és CSV-fájlt gyűjtesz össze, kézzel másolod őket egy táblába, javítod a formátumokat, majd összeállítod a riportot.</dd>
+                </div>
+                <div>
+                  <dt>Ezt végzi az automatizálás</dt>
+                  <dd>Beolvassa a fájlokat és exportokat, egységesíti az oszlopokat, ellenőrzi a hiányzó és ismétlődő adatokat, majd elkészíti az összesítést.</dd>
+                </div>
+                <div>
+                  <dt>Ezt kapod</dt>
+                  <dd>Egységes szerkezetű riportot a megszokott formában – Excelben, PDF-ben vagy e-mailben –, és külön listát a tételekről, amelyeket embernek kell megnéznie.</dd>
+                </div>
+                <div>
+                  <dt>Ez kell a felméréshez</dt>
+                  <dd>Két-három mintafájl (akár anonimizálva), egy korábban elkészült riport, és hogy ki, milyen gyakran készíti.</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="solution" aria-labelledby="megoldas-2">
+              <header class="solution-head">
+                <span class="solution-num" aria-hidden="true">02</span>
+                <h3 id="megoldas-2">Adatátadás meglévő rendszerek között</h3>
+              </header>
+              <dl class="solution-grid">
+                <div>
+                  <dt>Most így megy</dt>
+                  <dd>Ugyanazt az adatot – rendelést, ügyfelet, számlát vagy készletet – több programba is be kell írni, vagy exportálni és újra importálni.</dd>
+                </div>
+                <div>
+                  <dt>Ezt végzi az automatizálás</dt>
+                  <dd>Átveszi az adatot az egyik rendszerből, átalakítja, és átadja a másiknak: API-n keresztül, ha van ilyen, egyébként fájlexporttal vagy RPA-val.</dd>
+                </div>
+                <div>
+                  <dt>Ezt kapod</dt>
+                  <dd>Az adatot egyszer rögzíted, a többi helyre rögzített szabályok szerint jut el. Minden átadás naplózva van, hiba esetén értesítést kapsz.</dd>
+                </div>
+                <div>
+                  <dt>Ez kell a felméréshez</dt>
+                  <dd>Az érintett programok neve, hogy milyen adat, milyen irányban és milyen gyakran mozog, valamint hogy van-e API- vagy exportlehetőség.</dd>
+                </div>
+              </dl>
+            </article>
+
+            <article class="solution" aria-labelledby="megoldas-3">
+              <header class="solution-head">
+                <span class="solution-num" aria-hidden="true">03</span>
+                <h3 id="megoldas-3">Megkeresések, dokumentumbekérés és emlékeztetők</h3>
+              </header>
+              <dl class="solution-grid">
+                <div>
+                  <dt>Most így megy</dt>
+                  <dd>A megkeresések e-mailben, telefonon és űrlapon érkeznek. Hogy kitől milyen dokumentum hiányzik, azt táblázatban vagy fejben követed, az emlékeztetőket kézzel küldöd.</dd>
+                </div>
+                <div>
+                  <dt>Ezt végzi az automatizálás</dt>
+                  <dd>Egy helyre gyűjti a beérkező megkereséseket, nyilvántartja, mi hiányzik még, és a beállított ütemezés szerint emlékeztetőt küld.</dd>
+                </div>
+                <div>
+                  <dt>Ezt kapod</dt>
+                  <dd>Áttekinthető listát a nyitott ügyekről és állapotukról. Az emlékeztető akkor is kimegy, ha éppen senkinek sem jut eszébe.</dd>
+                </div>
+                <div>
+                  <dt>Ez kell a felméréshez</dt>
+                  <dd>Honnan érkeznek a megkeresések, milyen dokumentumokat kértek be, milyen lépésekből áll egy ügy, és milyen levelezőt, naptárt használtok.</dd>
+                </div>
+              </dl>
+            </article>
+          </div>
+
+          <aside class="also-card" aria-labelledby="egyedi-cim">
+            <div>
+              <h3 id="egyedi-cim">Egyedi üzleti alkalmazások</h3>
+              <p>
+                Ha a nyilvántartás már több táblázatban él, amit egyszerre többen szerkesztenek,
+                egy egyszerű webes alkalmazás jogosultságokkal, keresővel és előzményekkel
+                rendezettebb lehet. Ezt is a konkrét folyamatból kiindulva tervezzük meg.
+              </p>
+            </div>
+            <a class="btn btn-secondary" href="#kapcsolat" data-preselect="alkalmazas" data-track-cta="solutions-app">
+              Erről beszélnék
+            </a>
+          </aside>
+        </div>
+      </section>
+
+      <!-- BEMUTATÓ -->
+      <section class="section section-dark" id="bemutato" aria-labelledby="bemutato-cim">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Interaktív bemutató</p>
+            <h2 id="bemutato-cim">Heti riport több táblázatból</h2>
+            <p class="section-lead">
+              Három, eltérő formátumú értékesítési fájlból készül heti összesítő. A bemutató a
+              böngésződben fut: beolvassa a fájlokat, ellenőrzi az adatokat, és külön listázza,
+              amit embernek kell megnéznie.
+            </p>
+          </div>
+
+          <div class="demo" data-demo>
+            <div class="demo-bar">
+              <span class="demo-tag">Bemutató mintaadatokkal</span>
+              <span class="demo-note">A fájlok és számok kitaláltak, nem valódi ügyfél adatai.</span>
+            </div>
+
+            <div class="demo-body">
+              <div class="demo-files" data-demo-files></div>
+
+              <ol class="demo-steps" data-demo-steps>
+                <li data-step="0"><span class="step-dot" aria-hidden="true"></span><span>Mintafájlok beolvasása</span></li>
+                <li data-step="1"><span class="step-dot" aria-hidden="true"></span><span>Adatok ellenőrzése</span></li>
+                <li data-step="2"><span class="step-dot" aria-hidden="true"></span><span>Összesítő és eltéréslista</span></li>
+              </ol>
+
+              <div class="demo-actions">
+                <button class="btn btn-primary btn-lg" type="button" data-demo-run>Bemutató indítása</button>
+                <button class="btn btn-ghost-light" type="button" data-demo-reset hidden>Újrakezdés</button>
+              </div>
+
+              <p class="sr-only" aria-live="polite" data-demo-status></p>
+
+              <div class="demo-result" data-demo-result hidden tabindex="-1"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- EGYÜTTMŰKÖDÉS -->
+      <section class="section" id="egyuttmukodes" aria-labelledby="egyuttmukodes-cim">
+        <div class="container">
+          <div class="section-head">
+            <p class="eyebrow">Első projekt és együttműködés</p>
+            <h2 id="egyuttmukodes-cim">Kezdjünk egy jól körülhatárolt feladattal.</h2>
+            <p class="section-lead">
+              Nem az egész cég átalakításával kezdünk, hanem egyetlen, jól leírható folyamattal.
+              Így hamar kiderül, hogy a megoldás beválik-e a te működésedben.
+            </p>
+          </div>
+
+          <ol class="steps">
+            <li>
+              <h3>Rövid egyeztetés a jelenlegi folyamatról</h3>
+              <p>Megmutatod, hogyan végzed most a feladatot, milyen fájlokkal és programokkal.</p>
+            </li>
+            <li>
+              <h3>Írásos feladatleírás és árajánlat</h3>
+              <p>Leírjuk, mit csinál majd az automatizálás, mit nem, és mennyibe kerül.</p>
+            </li>
+            <li>
+              <h3>Megvalósítás és közös tesztelés</h3>
+              <p>Valós, de ellenőrizhető adatokon együtt nézzük át, hogy az eredmény megfelel-e.</p>
+            </li>
+            <li>
+              <h3>Dokumentáció, betanítás és átadás</h3>
+              <p>Leírást kapsz a működésről, és megmutatjuk azoknak, akik használni fogják.</p>
+            </li>
+            <li>
+              <h3>Igény szerinti felügyelet és karbantartás</h3>
+              <p>Ha kéred, figyeljük a működést, és követjük a kapcsolódó rendszerek változásait.</p>
+            </li>
+          </ol>
+
+          <div class="costs" aria-labelledby="koltsegek-cim">
+            <h3 id="koltsegek-cim">Miből állnak a költségek?</h3>
+            <div class="cost-grid">
+              <div class="cost">
+                <h4>Egyszeri fejlesztési díj</h4>
+                <p>Az ajánlatban leírt megoldás elkészítése, tesztelése, dokumentálása és átadása.</p>
+              </div>
+              <div class="cost">
+                <h4>Esetleges szoftver-előfizetések</h4>
+                <p>Ha a megoldáshoz külső szolgáltatás vagy tárhely kell, annak díját előre jelezzük. Sok feladat ilyen nélkül is megoldható.</p>
+              </div>
+              <div class="cost">
+                <h4>Választható karbantartás</h4>
+                <p>Felügyelet, hibajavítás és a kapcsolódó rendszerek változásainak követése – ha szükséged van rá.</p>
+              </div>
+            </div>
+            <p class="cost-note">
+              A pontos díjat a folyamat, az érintett rendszerek és az üzemeltetési igény alapján,
+              előre rögzített ajánlatban kapod meg.
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <!-- GÉPKÖLCSÖNZŐ CLOUD -->
+      <section class="section section-tint" id="gepkolcsonzo-cloud" aria-labelledby="gkc-cim">
+        <div class="container">
+          <div class="product">
+            <div class="product-copy">
+              <p class="eyebrow">Saját termékünk</p>
+              <h2 id="gkc-cim">
+                Gépkölcsönző Cloud
+                <span>géppark, foglalások és ügyfelek egy helyen.</span>
+              </h2>
+              <p>
+                Webes alkalmazás gépkölcsönzőknek, amely a kölcsönzés napi nyilvántartását egy
+                felületre hozza a külön táblázatok és füzetek helyett.
+              </p>
+              <div class="product-actions">
+                <a class="btn btn-primary btn-lg" href="#kapcsolat" data-preselect="gepkolcsonzo" data-track-cta="gkc-demo">
+                  Bemutatót kérek
+                </a>
+                <a
+                  class="text-link"
+                  href="https://gep-kolcsonzo-cloud-4023e108.base44.app/"
+                  target="_blank"
+                  rel="noopener"
+                  data-track-outbound="gepkolcsonzo-cloud"
+                >
+                  Az alkalmazás megnyitása<span class="sr-only"> (új lapon nyílik)</span>
+                  <svg aria-hidden="true" viewBox="0 0 16 16"><path d="M6 3h7v7M13 3L4 12" /></svg>
+                </a>
+              </div>
+            </div>
+
+            <ul class="product-features">
+              <li>
+                <h3>Géppark</h3>
+                <p>Gépek kategóriákba rendezve, egyedi azonosítóval, telephelyhez kötve, állapottal – például elérhető, kiadva, karbantartás alatt.</p>
+              </li>
+              <li>
+                <h3>Foglalások és bérlések</h3>
+                <p>Bérlési időszak, átvétel vagy kiszállítás, a bérlés állapota az ajánlattól a visszavételig.</p>
+              </li>
+              <li>
+                <h3>Ügyfelek</h3>
+                <p>Magánszemély és cég ügyfelek elérhetőségekkel, számlázási adatokkal és megjegyzésekkel.</p>
+              </li>
+              <li>
+                <h3>Csapat és jogosultságok</h3>
+                <p>Több felhasználó eltérő szerepkörrel, például vezető, ügyintéző vagy szerviz.</p>
+              </li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <!-- BEMUTATKOZÁS + GYIK -->
+      <section class="section" id="rolam" aria-labelledby="rolam-cim">
+        <div class="container about-grid">
+          <div class="about">
+            <p class="eyebrow">Bemutatkozás</p>
+            <h2 id="rolam-cim">Szia, Florian Viglas vagyok.</h2>
+            <p>
+              A munkám jelentős része eddig nagy adatmennyiségek feldolgozásáról, rendszeresen
+              elkészülő riportokról és összetett üzleti rendszerek közötti adatmozgatásról szólt.
+              Láttam, mennyi idő megy el azzal, hogy ugyanazt az adatot kézzel másolják, javítják
+              és összesítik.
+            </p>
+            <p>
+              A KKVauto-val ezt a tapasztalatot kisebb cégeknek hozom el. Veled beszélek, én
+              készítem a megoldást, és én is adom át. Ha egy feladatot nem érdemes
+              automatizálni, azt is megmondom.
+            </p>
+          </div>
+
+          <div class="faq" aria-labelledby="gyik-cim">
+            <h2 id="gyik-cim" class="h3">Gyakori kérdések</h2>
+
+            <details>
+              <summary>Megtarthatom a jelenlegi programjaimat?</summary>
+              <div>
+                <p>A cél általában az, hogy a meglévő programok mellett dolgozzon az automatizálás, ne helyettük. Hogy egy adott program hogyan köthető be, azt a felmérésnél nézzük meg. Ha valamelyik nem alkalmas rá, ezt előre jelezzük.</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Mi történik, ha nincs API?</summary>
+              <div>
+                <p>Sok program tud fájlt exportálni vagy importálni, ez gyakran elég. Ha ez sem működik, szóba jöhet RPA, vagyis a felhasználói felület gépi kezelése. Hogy melyik megbízható az adott esetben, azt a felmérés után, a feladatleírásban rögzítjük.</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Mennyibe kerül a megvalósítás?</summary>
+              <div>
+                <p>A pontos díjat a folyamat, az érintett rendszerek és az üzemeltetési igény alapján, előre rögzített ajánlatban kapod meg. Egyszeri fejlesztési díjból, esetleges szoftver-előfizetésekből és választható karbantartásból állhat össze.</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Hol fut az automatizálás?</summary>
+              <div>
+                <p>Ez a megoldástól és a te igényeidtől függ: futhat a cég saját gépén vagy szerverén, illetve felhőszolgáltatásban. A lehetőségeket és a hozzájuk tartozó költségeket az ajánlatban leírjuk, és közösen döntünk.</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Mi történik hiba esetén?</summary>
+              <div>
+                <p>A megoldásokat úgy tervezzük, hogy a hibás vagy hiányos adatot jelezzék, ne csendben továbbadják. Hogy ki kap értesítést, és mi a teendő, azt a dokumentáció rögzíti. Ha karbantartást is kérsz, a hibák elhárításának menetét abban a megállapodásban rögzítjük.</p>
+              </div>
+            </details>
+
+            <details>
+              <summary>Ki rendelkezik a fiókokkal és az adatokkal?</summary>
+              <div>
+                <p>Az üzleti adatok a tieid. Azt, hogy a szükséges fiókok és hozzáférések kinek a nevén legyenek, és átadáskor mi kerül hozzád, a megállapodásban előre rögzítjük.</p>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <!-- KAPCSOLAT -->
+      <section class="section section-tint" id="kapcsolat" aria-labelledby="kapcsolat-cim">
+        <div class="container contact-grid">
+          <div class="contact-intro">
+            <p class="eyebrow">Kapcsolat</p>
+            <h2 id="kapcsolat-cim">Mutasd meg a feladatot, amit ma még kézzel végzel.</h2>
+            <p>
+              Pár mondat elég: mit csinálsz, milyen gyakran, és milyen programokkal. Ezek alapján
+              visszajelzek, hogy érdemes-e automatizálni, és mi lenne a következő lépés.
+            </p>
+            <ul class="contact-points">
+              <li>Az első egyeztetés a feladat megértéséről szól.</li>
+              <li>Mintafájlt csak akkor kérek, ha szükséges, és anonimizálva is jó.</li>
+            </ul>
+          </div>
+
+          <form class="contact-form" novalidate data-contact-form>
+            <div class="field">
+              <label for="nev">Név <span class="req" aria-hidden="true">*</span></label>
+              <input id="nev" name="name" type="text" autocomplete="name" required maxlength="120" aria-describedby="nev-hiba" />
+              <p class="field-error" id="nev-hiba" data-error-for="name"></p>
+            </div>
+
+            <div class="field">
+              <label for="email">E-mail <span class="req" aria-hidden="true">*</span></label>
+              <input id="email" name="email" type="email" autocomplete="email" required maxlength="200" aria-describedby="email-hiba" />
+              <p class="field-error" id="email-hiba" data-error-for="email"></p>
+            </div>
+
+            <div class="field">
+              <label for="ceg">Cégnév <span class="opt">(nem kötelező)</span></label>
+              <input id="ceg" name="company" type="text" autocomplete="organization" maxlength="160" />
+            </div>
+
+            <div class="field">
+              <label for="tipus">Feladat típusa</label>
+              <select id="tipus" name="taskType" data-task-select>
+                <option value="">Válassz, ha tudod</option>
+              </select>
+            </div>
+
+            <div class="field field-wide">
+              <label for="leiras">Rövid feladatleírás <span class="req" aria-hidden="true">*</span></label>
+              <textarea id="leiras" name="description" rows="5" required minlength="20" maxlength="4000" aria-describedby="leiras-sugo leiras-hiba"></textarea>
+              <p class="field-hint" id="leiras-sugo">Például: „Minden hétfőn három Excel-fájlból állítom össze az értékesítési riportot, kb. két óra.”</p>
+              <p class="field-error" id="leiras-hiba" data-error-for="description"></p>
+            </div>
+
+            <div class="field field-wide">
+              <label for="programok">Használt programok <span class="opt">(nem kötelező)</span></label>
+              <input id="programok" name="tools" type="text" maxlength="400" aria-describedby="programok-sugo" />
+              <p class="field-hint" id="programok-sugo">Például: Excel, Gmail, számlázó, webshop, könyvelőprogram.</p>
+            </div>
+
+            <div class="hp-field" aria-hidden="true">
+              <label for="weboldal">Ezt a mezőt hagyd üresen</label>
+              <input id="weboldal" name="website" type="text" tabindex="-1" autocomplete="off" />
+            </div>
+
+            <p class="form-privacy" data-privacy-note hidden></p>
+
+            <div class="form-footer field-wide">
+              <button class="btn btn-primary btn-lg" type="submit" data-submit>
+                <span class="btn-spinner" aria-hidden="true"></span>
+                <span data-submit-label>Elküldöm a feladatot</span>
+              </button>
+              <p class="req-note"><span aria-hidden="true">*</span> kötelező mező</p>
+            </div>
+
+            <div class="form-status" role="status" aria-live="polite" data-form-status></div>
+          </form>
+
+          <div class="form-success" data-form-success hidden tabindex="-1">
+            <div class="success-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5" /></svg>
+            </div>
+            <h3>Megkaptam a feladatot, köszönöm!</h3>
+            <p>A megadott e-mail-címen jelentkezem. Ha közben eszedbe jut még valami, küldd el nyugodtan egy újabb üzenetben.</p>
+            <button class="btn btn-secondary" type="button" data-form-again>Új üzenet írása</button>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <div>
+          <a class="logo logo-sm" href="#teteje">KKV<span>auto</span></a>
+          <p>Automatizálás, riportok és integrációk kis- és középvállalkozásoknak.</p>
+        </div>
+        <nav aria-label="Lábléc navigáció">
+          <ul>
+            <li><a href="#megoldasok">Megoldások</a></li>
+            <li><a href="#bemutato">Bemutató</a></li>
+            <li><a href="#egyuttmukodes">Együttműködés</a></li>
+            <li><a href="#gepkolcsonzo-cloud">Gépkölcsönző Cloud</a></li>
+            <li><a href="#kapcsolat">Kapcsolat</a></li>
+            <li data-privacy-footer hidden></li>
+          </ul>
+        </nav>
+        <p class="footer-copy">© <span data-year>2026</span> KKVauto</p>
+      </div>
+    </footer>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
