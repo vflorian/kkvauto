@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+tests/.fields-cache/
+bench/out/
+*.pcap
+*.pcapng
+!tests/fixtures/*.pcap
+!tests/fixtures/*.pcapng

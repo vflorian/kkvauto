@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="hu">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CapScope – capture-elemző</title>
+<link rel="stylesheet" href="/static/app.css">
+<link rel="icon" href="data:,">
+</head>
+<body>
+<header class="top">
+  <div class="brand">CapScope <span class="muted small" id="ver"></span></div>
+  <div class="capsel">
+    <label for="capture-select" class="muted small">Capture</label>
+    <select id="capture-select"><option value="">– nincs megnyitva –</option></select>
+    <span id="cap-status" class="chip"></span>
+  </div>
+  <div class="opener">
+    <input id="open-path" type="text" placeholder="Helyi fájlútvonal, pl. C:\captures\s11.pcapng" spellcheck="false">
+    <button id="btn-browse" title="Natív fájlválasztó (helyben)">Tallózás…</button>
+    <input id="open-max" type="number" min="0" placeholder="max. csomag" title="Felhasználói korlát: csak az első N csomag indexelése (üres = mind)">
+    <button id="btn-open" class="primary">Megnyitás és indexelés</button>
+  </div>
+  <div class="timebase" title="Az alapnézet UTC. Megjelenítési eltolás: későbbi fázis.">Idő: <b>UTC</b></div>
+</header>
+<div id="jobs"></div>
+<div id="banners"></div>
+<nav class="tabs" id="tabs">
+  <button data-tab="overview" class="active">Áttekintés</button>
+  <button data-tab="sim">SIM és session</button>
+  <button data-tab="txn">Tranzakciók és flow-k</button>
+  <button data-tab="packets">Csomagok</button>
+  <button data-tab="incident">Incidens <span id="inc-count" class="badge"></span></button>
+</nav>
+<main>
+  <section id="tab-overview" class="tab active"><div class="empty">Nyiss meg egy capture-t a fenti mezőben.</div></section>
+  <section id="tab-sim" class="tab"></section>
+  <section id="tab-txn" class="tab"></section>
+  <section id="tab-packets" class="tab"></section>
+  <section id="tab-incident" class="tab"></section>
+</main>
+<div id="modal" class="modal hidden"><div class="modal-box"><button class="modal-close" id="modal-close">✕</button><div id="modal-body"></div></div></div>
+<div id="toast" class="toast hidden"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
