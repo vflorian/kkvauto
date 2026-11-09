@@ -323,10 +323,20 @@ def build_report(iid: int, mask: dict | None = None) -> dict:
           "limitations": [T(x) for x in _limitations(caps)]}
     js_path = base.with_suffix(".json")
     js_path.write_text(json.dumps(js, ensure_ascii=False, indent=1), "utf-8")
+    csv_path = base.with_suffix(".csv")
+    import csv
+    with open(csv_path, "w", newline="", encoding="utf-8-sig") as fh:
+        w = csv.writer(fh)
+        w.writerow(["time_utc", "capture_id", "capture_file", "frames", "kind", "state", "rule", "text", "note"])
+        for it in js["items"]:
+            w.writerow([it["time_utc"] or "", it["capture_id"] or "",
+                        caps[it["capture_id"]]["name"] if it["capture_id"] in caps else "",
+                        " ".join(map(str, it["frames"])), it["kind"], it["state"], it["rule"], it["text"], it["note"]])
     note = "angol összefoglaló; " + ("MASZKOLT: " + ", ".join(m.scope()["masked_classes"]) if m else "NEM maszkolt")
     r1 = _register_export(md_path, "report.md", masked, None, None, note, incident_id=iid)
     r2 = _register_export(js_path, "report.json", masked, None, None, note, incident_id=iid)
-    return {"markdown": md, "exports": [r1, r2]}
+    r3 = _register_export(csv_path, "report.csv", masked, None, None, note, incident_id=iid)
+    return {"markdown": md, "exports": [r1, r2, r3]}
 
 
 def incident_frames(iid: int) -> dict[int, list[int]]:

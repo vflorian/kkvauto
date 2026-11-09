@@ -200,7 +200,14 @@ async function renderOverview() {
     el("dt", null, "Csomagszám"), el("dd", null, fmtN(c.frames)),
     el("dt", null, "Bájt (frame.len)"), el("dd", null, fmtBytes(o.bytes)),
     el("dt", null, "Snaplen-csonkolt"), el("dd", null, info.snaplen_truncated ? `${fmtN(info.snaplen_truncated)} csomag` : "0"),
-    el("dt", null, "Csonka fájl"), el("dd", null, info.truncated ? `igen – ${info.truncation_note}` : "nem")));
+    el("dt", null, "Csonka fájl"), el("dd", null, info.truncated ? `igen – ${info.truncation_note}` : "nem")),
+    el("div", { class: "toolbar", style: "margin-top:8px" },
+      el("button", { onclick: () => reindex() }, "Újraindexelés"),
+      el("button", { class: "danger", title: "Csak a helyi indexet törli; a capture-fájl érintetlen marad", onclick: async () => {
+        if (!confirm("Törlöd ennek a capture-nek a helyi indexét? (A capture-fájl nem törlődik.)")) return;
+        await api(`/api/captures/${S.cid}`, { method: "DELETE" }); S.cid = null; S.cap = null;
+        const caps = await loadCaptures(); if (caps.length) selectCapture(caps[0].id); else { drawBanners(); renderOverview(); }
+      } }, "Index törlése")));
   const res = el("div", { class: "card" }, el("h3", null, "Elemzési eredmények"), el("dl", { class: "kv" },
     el("dt", null, "Megállapítások"), el("dd", null, `${sum(o.findings, x => x.severity === "error")} hiba · ${sum(o.findings, x => x.severity === "warn")} figyelmeztetés · ${sum(o.findings, x => x.severity === "info")} info`),
     el("dt", null, "DNS tranzakciók"), el("dd", null, `${sum(o.transactions, x => x.proto === "dns")} (válasz nélkül: ${sum(o.transactions, x => x.proto === "dns" && x.status === "unanswered")})`),
@@ -670,7 +677,7 @@ async function renderIncident() {
       el("div", { class: "toolbar", style: "margin-top:8px" }, noteT, el("button", { onclick: async () => { if (!noteT.value.trim()) return; await post(`/api/incidents/${iid}/items`, { kind: "note", title: noteT.value.trim() }); renderIncident(); } }, "Megfigyelés hozzáadása"))),
     el("div", { class: "grid" },
       el("div", { class: "card exportgroup masked" }, el("h3", null, "Riport – angol összefoglaló (szöveges export)"),
-        el("div", { class: "small" }, "Sablon alapján, helyben készül: UTC-idővonal, csomaghivatkozások, állapot (observed/inferred/undetermined), szabályok és vizsgálati korlátok. Markdown + JSON."),
+        el("div", { class: "small" }, "Sablon alapján, helyben készül: UTC-idővonal, csomaghivatkozások, állapot (observed/inferred/undetermined), szabályok és vizsgálati korlátok. Markdown + JSON + CSV (idővonal)."),
         el("h4", null, "Maszkolás hatóköre"), maskBox,
         el("div", { class: "small muted" }, "A maszkolás csak erre a szöveges riportra (és a CSV/JSON táblaexportokra) vonatkozik: mezők + szabad szöveg (ismert azonosítók és 14–16 jegyű számsorok). A nyers capture-export soha nem maszkolt."),
         el("div", { class: "toolbar", style: "margin-top:6px" }, el("button", { class: "primary", onclick: () => genReport(true) }, "Maszkolt riport készítése"), el("button", { onclick: () => genReport(false) }, "Maszkolatlan riport")),
