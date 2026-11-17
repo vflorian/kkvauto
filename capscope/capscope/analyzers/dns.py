@@ -34,7 +34,8 @@ class DnsAnalyzer(Analyzer):
     def __init__(self, ctx):
         super().__init__(ctx)
         self.w = BatchWriter(ctx.con, TXN_INSERT)
-        self.m = TxnMatcher(int(ctx.settings.dns_timeout_s * 1e9), self._final, self._orphan)
+        self.m = TxnMatcher(int(ctx.settings.dns_timeout_s * 1e9), self._final, self._orphan,
+                            int(ctx.settings.dup_capture_window_ms * 1e6))
 
     def on_packet(self, pkt: Packet) -> None:
         src, dst, sport, dport, l4 = pkt.endpoints_of("dns")
@@ -112,6 +113,9 @@ class DnsAnalyzer(Analyzer):
 
     def finish(self, cut: Cut) -> None:
         self.m.flush(cut)
+        if self.m.dup_count:
+            from .base import DUP_NOTE
+            self.ctx.warnings.append("DNS: " + DUP_NOTE.format(n=self.m.dup_count, ms=self.ctx.settings.dup_capture_window_ms))
         self.w.flush()
 
 

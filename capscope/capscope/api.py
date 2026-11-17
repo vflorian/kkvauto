@@ -487,15 +487,15 @@ def session_health(cid: int, apn: str | None = None, limit: int = Query(300, le=
         have = con.execute("SELECT 1 FROM sqlite_master WHERE name='session_health'").fetchone()
         if not have:
             return {"available": False, "note": "Ez az index a session-egészség modul előtt készült. Indexeld újra."}
-        apns = rows(con.execute("""SELECT coalesce(apn,'(nincs APN)') apn, count(*) sessions, sum(accepted) accepted,
+        apns = rows(con.execute("""SELECT coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)') apn, count(*) sessions, sum(accepted) accepted,
               sum(status='rejected') rejected, sum(up_state='no_traffic') no_traffic,
               sum(up_state='undetermined') up_undetermined, sum(up_state='traffic') with_traffic,
               sum(short_lived) short_lived, sum(pdn_mismatch) pdn_mismatch, count(DISTINCT imsi) imsis
-              FROM session_health GROUP BY 1 ORDER BY sessions DESC"""))
+              FROM session_health GROUP BY 1 ORDER BY apn IS NULL OR apn LIKE '(%', accepted DESC, sessions DESC"""))
         if not apns:
             return {"available": True, "apns": [], "note": "A capture-ben nincs GTP-C session."}
         apn = apn if apn in [a["apn"] for a in apns] else apns[0]["apn"]
-        a = "coalesce(apn,'(nincs APN)') = ?"
+        a = "coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)') = ?"
         rate = rows(con.execute("SELECT * FROM apn_rate WHERE apn=? ORDER BY bucket", (apn,)))
         onset = con.execute("SELECT * FROM apn_onset WHERE apn=?", (apn,)).fetchone()
         hist = rows(con.execute(f"""SELECT CASE
@@ -510,8 +510,8 @@ def session_health(cid: int, apn: str | None = None, limit: int = Query(300, le=
                  'létre sem jött']
         hist.sort(key=lambda h: order.index(h["bucket"]))
         dels = rows(con.execute(f"""SELECT coalesce(del_side,'–') side, coalesce(del_msg,'–') msg,
-              coalesce(del_initiator,'–') initiator, count(*) n FROM session_health WHERE {a} AND accepted
-              GROUP BY 1,2,3 ORDER BY n DESC""", (apn,)))
+              count(DISTINCT del_initiator) || ' küldő' initiator, count(*) n FROM session_health WHERE {a} AND accepted
+              GROUP BY 1,2 ORDER BY n DESC""", (apn,)))
         tacs = rows(con.execute(f"""SELECT coalesce(tac,'(nincs IMEI)') tac, count(*) sessions, count(DISTINCT imsi) imsis,
               sum(up_state='no_traffic') no_traffic, sum(up_state='undetermined') up_undetermined,
               sum(short_lived) short_lived, sum(pdn_mismatch) pdn_mismatch
@@ -519,7 +519,12 @@ def session_health(cid: int, apn: str | None = None, limit: int = Query(300, le=
         pdn = rows(con.execute(f"""SELECT coalesce(pdn_req,'–') requested, coalesce(pdn_alloc,'–') allocated, count(*) n
               FROM session_health WHERE {a} AND accepted GROUP BY 1,2 ORDER BY n DESC""", (apn,)))
         rat = rows(con.execute(f"SELECT rat, count(*) n FROM session_health WHERE {a} GROUP BY 1 ORDER BY n DESC", (apn,)))
-        imsis = rows(con.execute("SELECT * FROM imsi_health WHERE coalesce(apn,'(nincs APN)')=? ORDER BY score DESC "
+        dnsq = rows(con.execute(f"""SELECT CASE WHEN dns_fail > 0 THEN 'hibás: ' || coalesce(dns_fail_qname,'?')
+              WHEN dns_ok > 0 THEN 'sikeres' ELSE 'nincs DNS a capture-ben' END outcome, count(*) sessions,
+              sum(deleted_ts IS NOT NULL) deleted, sum(del_side='access') del_access,
+              round(avg(dns_fail_to_delete_ns) / 1e9, 2) avg_fail_to_delete_s
+              FROM session_health WHERE {a} AND accepted GROUP BY 1 ORDER BY sessions DESC""", (apn,)))
+        imsis = rows(con.execute("SELECT * FROM imsi_health WHERE coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)')=? ORDER BY score DESC "
                                  "LIMIT ?", (apn, limit)))
         gtpu = con.execute("SELECT count(*) FROM gtpu_frames").fetchone()[0]
         finds = rows(con.execute("SELECT * FROM findings WHERE analyzer='session_health' ORDER BY "
@@ -536,7 +541,7 @@ def session_health(cid: int, apn: str | None = None, limit: int = Query(300, le=
     if o:
         o["utc"] = ts_iso(o["onset_bucket"] * 1_000_000_000)
     return {"available": True, "apn": apn, "apns": apns, "rate": rate, "onset": o, "duration_hist": hist,
-            "deletions": dels, "tacs": tacs, "pdn": pdn, "rat": rat, "imsis": imsis, "findings": finds,
+            "deletions": dels, "tacs": tacs, "dns": dnsq, "pdn": pdn, "rat": rat, "imsis": imsis, "findings": finds,
             "gtpu_packets": gtpu, "user_plane_visible": gtpu > 0,
             "settings": {"short_session_s": settings.short_session_s, "rate_increase_factor": settings.rate_increase_factor,
                          "churn_min_sessions": settings.churn_min_sessions}}

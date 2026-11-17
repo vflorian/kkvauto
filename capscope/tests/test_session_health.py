@@ -70,3 +70,36 @@ def test_session_health_api(tmp_path):
     assert d["available"] and d["apn"] == "iot.example.nl" and d["user_plane_visible"]
     assert d["onset"]["utc"].startswith("2025-11-15T06:20") and d["imsis"][0]["imsi"].startswith("90128800")
     assert any(h["bucket"] == "< 5 s" for h in d["duration_hist"]) and d["tacs"][0]["tac"]
+
+
+@needs_tshark
+def test_capture_duplicates_and_dns_fail_then_delete(tmp_path):
+    from capscope.synth import Scenario, dns_query, dns_response, inner_udp, lte_attach, lte_detach
+    sc = Scenario()
+    a = lte_attach(sc, imsi="901288000000001", msisdn="1", apn="iot", ue_ip="10.60.0.1", seq=0x10)
+    # the same Create Session Request captured a second time 9 ms later (second capture point)
+    sc.add(0, sc.frames[a["csr"] - 1].data)
+    sc.frames[-1].ts_ns = sc.frames[a["csr"] - 1].ts_ns + 9_000_000
+    sc.frames.sort(key=lambda f: f.ts_ns)
+    sc.gtpu(3000, "10.0.2.1", "10.0.1.2", 0xA0001, inner_udp("10.60.0.1", "10.223.0.68", 4000, 53, dns_query(5, "bad.example")))
+    sc.gtpu(20, "10.0.1.2", "10.0.2.1", 0xB0001, inner_udp("10.223.0.68", "10.60.0.1", 53, 4000, dns_response(5, "bad.example", rcode=3)))
+    b = lte_attach(sc, imsi="901288000000002", msisdn="2", apn="iot", ue_ip="10.60.0.2", seq=0x20, mme_teid=0x1002,
+                   sgw_teid=0x2002, sgw_u_teid=0xA0002, enb_teid=0xB0002)
+    sc.gtpu(10, "10.0.2.1", "10.0.1.2", 0xA0002, inner_udp("10.60.0.2", "10.223.0.68", 4001, 53, dns_query(6, "good.example")))
+    sc.gtpu(20, "10.0.1.2", "10.0.2.1", 0xB0002, inner_udp("10.223.0.68", "10.60.0.2", 53, 4001, dns_response(6, "good.example", answers=["10.1.1.1"])))
+    lte_detach(sc, seq=0x30, sgw_teid=0x2001, mme_teid=0x1001)
+    for _ in range(40):  # capture continues
+        sc.gtpu(1000, "10.0.2.1", "10.0.1.2", 0xA0002, inner_udp("10.60.0.2", "10.1.1.1", 4002, 5684, b"x"))
+    cid = index_file(sc.write(str(tmp_path / "dnsdel.pcapng")))
+    csr = q(cid, "SELECT retrans, note FROM transactions WHERE kind='Create Session Request' ORDER BY req_frame")[0]
+    assert csr["retrans"] == 0 and "Duplikált rögzítés" in csr["note"]
+    assert len(q(cid, "SELECT id FROM gtp_sessions")) == 2  # the duplicate did not open a session
+    from capscope.db import get_capture
+    assert any("Duplikált rögzítés" in w for w in get_capture(cid)["info"]["warnings"])
+    h = {r["imsi"]: r for r in q(cid, "SELECT * FROM session_health")}
+    bad, good = h["901288000000001"], h["901288000000002"]
+    assert bad["dns_fail"] == 1 and bad["dns_fail_qname"].startswith("bad.example") and bad["del_side"] == "access"
+    assert 0 < bad["dns_fail_to_delete_ns"] < 1e9 and good["dns_ok"] == 1 and good["deleted_ts"] is None
+    f = q(cid, "SELECT state, title_en FROM findings WHERE rule='DNS-FAIL-THEN-DELETE'")
+    assert f and f[0]["state"] == "inferred" and "0 of 1 sessions with successful DNS were deleted" in f[0]["title_en"]
+    _ = b

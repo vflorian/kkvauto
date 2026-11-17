@@ -31,6 +31,10 @@ L4_LAYERS = ("tcp", "udp", "sctp")
 ICMP_LAYERS = ("icmp", "icmpv6")
 
 
+DUP_NOTE = ("Duplikált rögzítés: {n} GTP-C/DNS üzenet ugyanazzal az azonosítóval és végpontokkal ≤ {ms} ms-on belül "
+            "kétszer szerepel (jellemzően két capture-pont / VLAN-láb). Ezeket nem számoljuk újraküldésnek.")
+
+
 @dataclass
 class Cut:
     """Describes why the indexed range may end before the real end of traffic."""
@@ -214,6 +218,7 @@ class Pending:
     rsp_ts: int | None = None
     rsp_data: dict | None = None
     dup_rsp: list[int] = field(default_factory=list)
+    dups: list[int] = field(default_factory=list)  # same message captured again within dup_ns (capture duplicate)
 
 
 class TxnMatcher:
@@ -226,22 +231,29 @@ class TxnMatcher:
     """
 
     def __init__(self, timeout_ns: int, on_final: Callable[[Pending, str], None],
-                 on_orphan: Callable[[tuple, Packet, dict], None] | None = None):
+                 on_orphan: Callable[[tuple, Packet, dict], None] | None = None, dup_ns: int = 50_000_000):
         self.timeout_ns = timeout_ns
+        self.dup_ns = dup_ns
         self.pending: dict[tuple, Pending] = {}
         self.on_final, self.on_orphan = on_final, on_orphan
+        self.dup_count = 0
 
-    def request(self, key: tuple, pkt: Packet, data: dict) -> tuple[Pending, bool]:
-        """Returns (pending, is_retransmission)."""
+    def request(self, key: tuple, pkt: Packet, data: dict) -> tuple[Pending, str | None]:
+        """Returns (pending, kind): kind None = new request, 'dup' = the same request captured again within
+        ``dup_ns`` (two capture points / VLAN legs – not a protocol retransmission), 'retrans' = retransmission."""
         p = self.pending.get(key)
         if p is not None:
+            if 0 <= pkt.ts_ns - p.req_ts <= self.dup_ns:
+                p.dups.append(pkt.frame)
+                self.dup_count += 1
+                return p, "dup"
             if p.rsp_frame is None and pkt.ts_ns - p.req_ts <= self.timeout_ns:
                 p.retrans.append(pkt.frame)
-                return p, True
+                return p, "retrans"
             self._final(self.pending.pop(key))
         p = Pending(key, pkt.frame, pkt.ts_ns, data)
         self.pending[key] = p
-        return p, False
+        return p, None
 
     def response(self, key: tuple, pkt: Packet, data: dict) -> Pending | None:
         p = self.pending.get(key)
@@ -250,7 +262,11 @@ class TxnMatcher:
                 self.on_orphan(key, pkt, data)
             return None
         if p.rsp_frame is not None:
-            p.dup_rsp.append(pkt.frame)
+            if 0 <= pkt.ts_ns - p.rsp_ts <= self.dup_ns:
+                p.dups.append(pkt.frame)
+                self.dup_count += 1
+            else:
+                p.dup_rsp.append(pkt.frame)
             return p
         p.rsp_frame, p.rsp_ts, p.rsp_data = pkt.frame, pkt.ts_ns, data
         return p
@@ -286,6 +302,8 @@ def txn_state(p: Pending, how: str) -> tuple[str, str, str]:
             note = f"A kérés {len(p.retrans)}× ismételve a válasz előtt."
         if p.dup_rsp:
             note += f" Többszörös válasz: {', '.join(map(str, p.dup_rsp))}."
+        if p.dups:
+            note += f" Duplikált rögzítés (≤ 50 ms, nem újraküldés): {', '.join(map(str, p.dups[:6]))}."
         return "answered", OBSERVED, note.strip()
     if how == "cut":
         return "unanswered", UNDETERMINED, (NO_RESPONSE_TEXT + " Az index a válaszablakon belül véget ér "
@@ -296,6 +314,8 @@ def txn_state(p: Pending, how: str) -> tuple[str, str, str]:
     note = NO_RESPONSE_TEXT
     if p.retrans:
         note += f" A kérés {len(p.retrans)}× ismételve."
+    if p.dups:
+        note += f" Duplikált rögzítés: {', '.join(map(str, p.dups[:6]))}."
     return "unanswered", OBSERVED, note
 
 

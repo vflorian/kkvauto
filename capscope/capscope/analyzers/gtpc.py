@@ -214,7 +214,8 @@ class GtpcAnalyzer(Analyzer):
         self.ev = BatchWriter(con, "INSERT INTO gtp_events(session_id, frame, ts_ns, version, msg_type, msg_name, src, "
                                    "dst, header_teid, seq, cause, cause_text, role, state, rule) "
                                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
-        self.m = TxnMatcher(int(ctx.settings.gtp_timeout_s * 1e9), self._final, self._orphan)
+        self.m = TxnMatcher(int(ctx.settings.gtp_timeout_s * 1e9), self._final, self._orphan,
+                            int(ctx.settings.dup_capture_window_ms * 1e6))
         self.sessions: dict[int, Session] = {}
         self.ctrl_index: dict[tuple[str, int], int] = {}
         self.uidx = UPlaneIndex()
@@ -337,7 +338,7 @@ class GtpcAnalyzer(Analyzer):
             if mt == 32 and not hteid:
                 key = (2, seq, src, sport, dst)
                 pend = self.m.pending.get(key)
-                if pend is not None and pend.rsp_frame is None:
+                if pend is not None and (pend.rsp_frame is None or 0 <= pkt.ts_ns - pend.req_ts <= self.m.dup_ns):
                     sess = self.sessions.get(pend.data.get("sid"))
                 else:
                     sess = self._new_session(2, pkt, "pending")
@@ -355,7 +356,7 @@ class GtpcAnalyzer(Analyzer):
             pend, retrans = self.m.request((2, seq, src, sport, dst), pkt, data)
             if sess and not retrans:
                 self._apply_v2_request(sess, pkt, mt, src)
-            self._event(sess, pkt, data, "request" if not retrans else "retransmission", seq)
+            self._event(sess, pkt, data, {None: "request", "dup": "duplicate"}.get(retrans, "retransmission"), seq)
             return
         if mt - 1 in V2_PAIR and V2_PAIR[mt - 1] == mt:
             key = (2, seq, dst, dport, src)
@@ -478,7 +479,7 @@ class GtpcAnalyzer(Analyzer):
             key = (1, seq, src, sport, dst)
             if mt == 16 and not hteid:
                 pend = self.m.pending.get(key)
-                if pend is not None and pend.rsp_frame is None:
+                if pend is not None and (pend.rsp_frame is None or 0 <= pkt.ts_ns - pend.req_ts <= self.m.dup_ns):
                     sess = self.sessions.get(pend.data.get("sid"))
                 else:
                     sess = self._new_session(1, pkt, "pending")
@@ -508,7 +509,7 @@ class GtpcAnalyzer(Analyzer):
                     sess.status = "deleting"
                     sess.del_initiator, sess.del_msg, sess.del_req_frame = src, V1_MSG[20], pkt.frame
                 self._save(sess)
-            self._event(sess, pkt, data, "request" if not retrans else "retransmission", seq)
+            self._event(sess, pkt, data, {None: "request", "dup": "duplicate"}.get(retrans, "retransmission"), seq)
             return
         if mt - 1 in V1_PAIR and V1_PAIR[mt - 1] == mt:
             key = (1, seq, dst, dport, src)
@@ -634,6 +635,9 @@ class GtpcAnalyzer(Analyzer):
 
     def finish(self, cut: Cut) -> None:
         self.m.flush(cut)
+        if self.m.dup_count:
+            from .base import DUP_NOTE
+            self.ctx.warnings.append("GTP-C: " + DUP_NOTE.format(n=self.m.dup_count, ms=self.ctx.settings.dup_capture_window_ms))
         for s in list(self.sessions.values()):
             if s.status == "pending":
                 s.status = "undetermined"

@@ -33,7 +33,8 @@ CREATE TABLE IF NOT EXISTS session_health(
   status TEXT, created_ts INTEGER, created_frame INTEGER, accepted INTEGER, deleted_ts INTEGER, deleted_frame INTEGER,
   duration_ns INTEGER, ul_pkts INTEGER, dl_pkts INTEGER, ul_bytes INTEGER, dl_bytes INTEGER,
   up_state TEXT, up_note TEXT, short_lived INTEGER, del_side TEXT, del_initiator TEXT, del_msg TEXT,
-  del_req_frame INTEGER, pdn_req TEXT, pdn_alloc TEXT, pdn_mismatch INTEGER, prev_gap_ns INTEGER, imsi_seq INTEGER);
+  del_req_frame INTEGER, pdn_req TEXT, pdn_alloc TEXT, pdn_mismatch INTEGER, prev_gap_ns INTEGER, imsi_seq INTEGER,
+  dns_ok INTEGER, dns_fail INTEGER, dns_fail_qname TEXT, dns_fail_frame INTEGER, dns_fail_to_delete_ns INTEGER);
 CREATE INDEX IF NOT EXISTS ix_sh_imsi ON session_health(imsi);
 CREATE INDEX IF NOT EXISTS ix_sh_apn ON session_health(apn, created_ts);
 CREATE TABLE IF NOT EXISTS imsi_health(
@@ -115,6 +116,12 @@ class SessionHealthAnalyzer(Analyzer):
         creators = {r[0]: r[1] for r in con.execute(
             "SELECT session_id, src, min(frame) FROM gtp_events WHERE role='request' AND msg_type IN (32, 16) "
             "AND session_id IS NOT NULL GROUP BY session_id")}
+        # DNS transactions by client IP (the UE address inside the tunnel / on SGi)
+        dns: dict[str, list] = {}
+        for t in con.execute("SELECT client, req_ts, rsp_ts, rsp_frame, result_ok, summary FROM transactions "
+                             "WHERE proto='dns' AND req_ts IS NOT NULL ORDER BY req_ts"):
+            dns.setdefault(t[0], []).append(t)
+        end_ts = cut.last_ts_ns
         last_end: dict[str, int] = {}
         seq: dict[str, int] = {}
         rows = []
@@ -130,6 +137,12 @@ class SessionHealthAnalyzer(Analyzer):
                 up_state, up_note = "n/a", "A session nem jött létre (elutasítva / válasz nélkül)."
             elif pk:
                 up_state, up_note = "traffic", "GTP-U forgalom hozzárendelve (GTPU-FTEID)."
+            elif not s["deleted_ts"] and cut.last_ts_ns is not None and \
+                    cut.last_ts_ns - s["created_ts"] < st.min_observe_s * 1e9:
+                up_state = "undetermined"
+                up_note = (f"A session a capture végéig csak {(cut.last_ts_ns - s['created_ts']) / 1e9:.1f} s-ig "
+                           f"látszik (< {st.min_observe_s:.0f} s) és nem bontott: túl rövid megfigyelés ahhoz, "
+                           "hogy a forgalom hiánya eldönthető legyen.")
             elif u_ips.get(sid) and u_ips[sid] & seen_ips:
                 up_state = "no_traffic"
                 up_note = ("Nincs hozzárendelt GTP-U, pedig a session user-plane végpontjain (" +
@@ -141,10 +154,16 @@ class SessionHealthAnalyzer(Analyzer):
                             " (a végpontjain nincs GTP-U a capture-ben)") +
                            ", ezért nem eldönthető, volt-e adatforgalom.")
             short = int(dur is not None and dur < short_ns)
-            creator = creators.get(sid) or s.get("req_src")
+            # TS 29.274: Delete Session Request always travels MME -> SGW -> PGW (UE/MME/SGW-initiated);
+            # PGW-initiated release uses Delete Bearer Request. GTPv1 Delete PDP may come from either side.
+            creator = creators.get(sid)
             del_side = None
-            if s["del_initiator"]:
-                del_side = "access" if creator and s["del_initiator"] == creator else ("core" if creator else None)
+            if s["del_msg"] == "Delete Session Request":
+                del_side = "access"
+            elif s["del_msg"] == "Delete Bearer Request":
+                del_side = "core"
+            elif s["del_initiator"] and creator:
+                del_side = "access" if s["del_initiator"] == creator else "core"
             pdn_alloc = ("IPv4v6" if s["ue_ipv4"] and s["ue_ipv6"] else "IPv4" if s["ue_ipv4"] else
                          "IPv6" if s["ue_ipv6"] else None)
             pdn_req = PDN.get(s["pdn_type_req"]) if s["pdn_type_req"] else None
@@ -157,13 +176,28 @@ class SessionHealthAnalyzer(Analyzer):
                     gap = s["created_ts"] - last_end[imsi]
                 if s["deleted_ts"]:
                     last_end[imsi] = s["deleted_ts"]
+            d_ok = d_fail = 0
+            d_name = d_frame = d_gap = None
+            ue = s["ue_ipv4"] or s["ue_ipv6"]
+            if accepted and ue:
+                hi = s["deleted_ts"] or end_ts or 0
+                for _c, rq, rs, rf, okv, summ in dns.get(ue, ()):
+                    if rq < s["created_ts"] or rq > hi:
+                        continue
+                    if okv == 1:
+                        d_ok += 1
+                    elif okv == 0:
+                        d_fail += 1
+                        if d_name is None:
+                            d_name, d_frame = summ, rf
+                            d_gap = (s["deleted_ts"] - rs) if s["deleted_ts"] and rs else None
             imei = s["imei"]
             rows.append((sid, s["version"], imsi, s["apn"], imei, imei[:8] if imei and len(imei) >= 8 else None,
                          s["rat"], s["status"], s["created_ts"], s["created_frame"], accepted, s["deleted_ts"],
                          s["deleted_frame"], dur, ul[0] or 0, dl[0] or 0, ul[1] or 0, dl[1] or 0, up_state, up_note,
                          short, del_side, s["del_initiator"], s["del_msg"], s["del_req_frame"], pdn_req, pdn_alloc,
-                         mism, gap, seq.get(imsi)))
-        con.executemany(f"INSERT OR REPLACE INTO session_health VALUES ({','.join('?' * 30)})", rows)
+                         mism, gap, seq.get(imsi), d_ok, d_fail, d_name, d_frame, d_gap))
+        con.executemany(f"INSERT OR REPLACE INTO session_health VALUES ({','.join('?' * 35)})", rows)
         self._per_imsi()
         self._per_apn(cut)
         self._findings(any_gtpu)
@@ -202,7 +236,7 @@ class SessionHealthAnalyzer(Analyzer):
                 w = cand
                 break
         con.execute("""INSERT OR REPLACE INTO apn_rate
-            SELECT coalesce(apn,'(nincs APN)'), (created_ts / 1000000000 / ?) * ?, ?, count(*), sum(accepted),
+            SELECT coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)'), (created_ts / 1000000000 / ?) * ?, ?, count(*), sum(accepted),
                    sum(status='rejected'), sum(up_state='no_traffic'), sum(up_state='undetermined'),
                    sum(short_lived), count(DISTINCT imsi)
             FROM session_health GROUP BY 1, 2""", (w, w, w))
@@ -238,7 +272,7 @@ class SessionHealthAnalyzer(Analyzer):
         for r in con.execute("SELECT * FROM apn_onset"):
             ts = r["onset_bucket"] * 1_000_000_000
             frames = [x[0] for x in con.execute(
-                "SELECT created_frame FROM session_health WHERE coalesce(apn,'(nincs APN)')=? AND created_ts>=? "
+                "SELECT created_frame FROM session_health WHERE coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)')=? AND created_ts>=? "
                 "ORDER BY created_ts LIMIT 5", (r["apn"], ts))]
             f("session_health", "SESSION-RATE-INCREASE", INFERRED, "warn", ts,
               f"APN {r['apn']}: Create Session ráta-növekedés {r['ratio']:.1f}× ettől: "
@@ -246,7 +280,7 @@ class SessionHealthAnalyzer(Analyzer):
               en=f"APN {r['apn']}: Create Session/PDP request rate increased {r['ratio']:.1f}x "
                  f"({r['before_per_min']:.1f}/min -> {r['after_per_min']:.1f}/min) starting at "
                  f"{_utc(r['onset_bucket'])} UTC ({r['width']} s resolution)")
-        for r in con.execute("""SELECT coalesce(apn,'(nincs APN)') apn, sum(accepted) acc,
+        for r in con.execute("""SELECT coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)') apn, sum(accepted) acc,
                                   sum(up_state='no_traffic') nt, sum(up_state='undetermined') und,
                                   sum(short_lived) sh, sum(pdn_mismatch) mm FROM session_health GROUP BY 1"""):
             if r["nt"]:
@@ -258,18 +292,43 @@ class SessionHealthAnalyzer(Analyzer):
                      f"in the capture (their GTP-U endpoints are visible)")
             if r["und"]:
                 f("session_health", "SESSION-NO-UPLANE", UNDETERMINED, "info", None,
-                  f"APN {r['apn']}: {r['und']} session adatforgalma nem eldönthető (a user plane nem látszik)",
+                  f"APN {r['apn']}: {r['und']} session adatforgalma nem eldönthető (a user plane nem látszik, vagy a session túl rövid ideig látszik)",
                   "A capture-pontban ezeknek a sessionöknek a GTP-U végpontjai nem látszanak (pl. csak control-plane "
                   "trace). A 'forgalom nélküli' állításhoz user-plane (S1-U/S5-U/Gn-U) capture vagy CDR szükséges.",
                   [], "apn", None,
                   en=f"APN {r['apn']}: user-plane activity of {r['und']} sessions cannot be determined - the user "
-                     f"plane is not visible at the capture point")
+                     f"plane is not visible at the capture point or the session is observed for less than "
+                     f"{st.min_observe_s:.0f} s before the capture ends")
             if r["mm"]:
                 f("session_health", "PDN-TYPE-MISMATCH", OBSERVED, "info", None,
                   f"APN {r['apn']}: {r['mm']} sessionnél a kért és a kiosztott PDN-típus eltér",
                   "Pl. IPv4v6 kérés, csak IPv4 kiosztás. Egyes eszközök ilyenkor bontanak és újrapróbálkoznak.",
                   [], "apn", None,
                   en=f"APN {r['apn']}: requested and allocated PDN type differ in {r['mm']} sessions")
+        # DNS failure followed by the session being deleted (device gives up after a failed lookup)
+        for r in con.execute("""SELECT coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)') apn, dns_fail_qname q, count(*) n,
+                  sum(deleted_ts IS NOT NULL) deleted, sum(del_side='access') del_access
+                  FROM session_health WHERE dns_fail > 0 GROUP BY 1, 2 ORDER BY n DESC""").fetchall():
+            gaps = sorted(x[0] for x in con.execute(
+                "SELECT dns_fail_to_delete_ns FROM session_health WHERE coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)')=? AND "
+                "dns_fail_qname IS ? AND dns_fail_to_delete_ns IS NOT NULL", (r["apn"], r["q"])))
+            ok = con.execute("SELECT count(*), sum(deleted_ts IS NOT NULL) FROM session_health WHERE "
+                             "coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)')=? AND dns_ok > 0 AND dns_fail = 0", (r["apn"],)).fetchone()
+            frames = [x[0] for x in con.execute("SELECT dns_fail_frame FROM session_health WHERE "
+                                                "coalesce(apn,'(létrehozás nem látszik – APN ismeretlen)')=? AND dns_fail_qname IS ? LIMIT 5",
+                                                (r["apn"], r["q"]))]
+            med = f"{gaps[len(gaps) // 2] / 1e9:.1f} s ({gaps[0] / 1e9:.1f}–{gaps[-1] / 1e9:.1f} s)" if gaps else "–"
+            okn = ok[0] or 0
+            f("session_health", "DNS-FAIL-THEN-DELETE" if r["deleted"] else "DNS-FAIL-IN-SESSION",
+              INFERRED if r["deleted"] else OBSERVED, "warn", None,
+              f"APN {r['apn']}: {r['n']} sessionben sikertelen DNS ({r['q']}); ebből {r['deleted']} bontott a capture-ben",
+              f"Hibás DNS-válasz → bontás medián {med}; bontást kezdeményezte a hozzáférési oldal {r['del_access']}×. "
+              f"Összevetés: sikeres DNS-ű sessionök: {okn}, ebből bontott {ok[1] or 0}. Időbeli egymásutániság "
+              f"(következtetés), nem bizonyított ok-okozat; a bontás csak a capture végéig látható.", frames, "apn", None,
+              en=f"APN {r['apn']}: {r['n']} sessions got a failed DNS answer for {r['q']}; {r['deleted']} of them "
+                 f"were deleted in the capture, median {med} after the failed answer"
+                 + (f", deletion initiated by the access side {r['del_access']}x" if r["del_access"] else "")
+                 + f" (comparison: {ok[1] or 0} of {okn} sessions with successful DNS were deleted)")
         churn = con.execute("""SELECT * FROM imsi_health WHERE (short_lived + no_traffic) >= ? OR sessions >= ?
                                ORDER BY score DESC""", (st.churn_min_sessions, st.churn_min_sessions * 2)).fetchall()
         for r in churn[:50]:

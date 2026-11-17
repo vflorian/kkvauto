@@ -32,7 +32,7 @@ main { padding: 12px 16px 40px; }
 .tab { display: none; } .tab.active { display: block; }
 .empty { padding: 40px; text-align: center; color: var(--muted); }
 .grid { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
-.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; overflow-x: auto; min-width: 0; }
 .card h3 { margin: 0 0 8px; font-size: 14px; }
 .card h4 { margin: 10px 0 6px; font-size: 13px; }
 .kv { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; }
