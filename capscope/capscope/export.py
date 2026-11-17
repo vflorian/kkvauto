@@ -204,6 +204,8 @@ TABLES = {
                 "FROM findings ORDER BY ts_ns",
     "sessions": "SELECT * FROM gtp_sessions ORDER BY created_ts",
     "tunnels": "SELECT * FROM gtpu_tunnels ORDER BY first_ts",
+    "imsi_health": "SELECT * FROM imsi_health ORDER BY score DESC",
+    "session_health": "SELECT * FROM session_health ORDER BY created_ts",
 }
 
 

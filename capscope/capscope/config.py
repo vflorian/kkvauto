@@ -33,6 +33,12 @@ class Settings:
     dns_timeout_s: float = 5.0
     gtp_timeout_s: float = 30.0
     gtpu_grace_s: float = 2.0
+    # Session health (session_health analyzer)
+    short_session_s: float = field(default_factory=lambda: float(os.environ.get("CAPSCOPE_SHORT_SESSION_S", 60)))
+    churn_min_sessions: int = 3
+    rate_bucket_s: int = 60
+    rate_increase_factor: float = 3.0
+    rate_min_after_per_min: float = 1.0
     auth_token: str | None = None  # set at start-up
     allowed_ext: tuple = (".pcap", ".pcapng", ".cap", ".ntar", ".pcap.gz", ".pcapng.gz")
 

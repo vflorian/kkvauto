@@ -105,7 +105,7 @@ CREATE TABLE IF NOT EXISTS gtp_sessions(
   id INTEGER PRIMARY KEY, version INTEGER, leg TEXT, imsi TEXT, msisdn TEXT, imei TEXT, apn TEXT, ue_ipv4 TEXT,
   ue_ipv6 TEXT, rat INTEGER, status TEXT, created_frame INTEGER, created_ts INTEGER, accepted_frame INTEGER,
   deleted_frame INTEGER, deleted_ts INTEGER, cause INTEGER, cause_text TEXT, cause_ok INTEGER, note TEXT,
-  last_ts INTEGER);
+  last_ts INTEGER, pdn_type_req INTEGER, req_src TEXT, del_initiator TEXT, del_msg TEXT, del_req_frame INTEGER);
 CREATE TABLE IF NOT EXISTS gtp_events(
   id INTEGER PRIMARY KEY, session_id INTEGER, frame INTEGER, ts_ns INTEGER, version INTEGER, msg_type INTEGER,
   msg_name TEXT, src TEXT, dst TEXT, header_teid TEXT, seq TEXT, cause INTEGER, cause_text TEXT, role TEXT,
@@ -178,6 +178,11 @@ class Session:
     ue_ipv4: str | None = None
     ue_ipv6: str | None = None
     rat: int | None = None
+    pdn_type_req: int | None = None
+    req_src: str | None = None        # sender of the creating request (MME/SGW/SGSN side)
+    del_initiator: str | None = None  # sender of the Delete Session / Delete Bearer / Delete PDP request
+    del_msg: str | None = None
+    del_req_frame: int | None = None
     status: str = "pending"
     ctrl: list[tuple[str, int]] = field(default_factory=list)
     uplane: list[FTeid] = field(default_factory=list)
@@ -196,7 +201,7 @@ class GtpcAnalyzer(Analyzer):
     fields = ("gtpv2.message_type", "gtpv2.seq", "gtpv2.teid", "gtpv2.cause", "e212.imsi", "e164.msisdn",
               "gtpv2.mei", "gtpv2.apn", "gtpv2.rat_type", "gtpv2.f_teid_interface_type", "gtpv2.f_teid_gre_key",
               "gtpv2.f_teid_ipv4", "gtpv2.f_teid_ipv6", "gtpv2.f_teid_v4", "gtpv2.f_teid_v6", "gtpv2.ebi",
-              "gtpv2.pdn_addr_and_prefix.ipv4", "gtpv2.pdn_addr_and_prefix.ipv6",
+              "gtpv2.pdn_addr_and_prefix.ipv4", "gtpv2.pdn_addr_and_prefix.ipv6", "gtpv2.pdn_type",
               "gtp.message", "gtp.seq_number", "gtp.teid", "gtp.cause", "gtp.apn", "gtp.teid_cp", "gtp.teid_data",
               "gtp.gsn_ipv4", "gtp.gsn_ipv6", "gtp.user_ipv4", "gtp.user_ipv6", "gtp.nsapi", "gtp.ext_imeisv")
     schema = SCHEMA
@@ -226,7 +231,9 @@ class GtpcAnalyzer(Analyzer):
 
     def _save(self, s: Session, **extra) -> None:
         cols = dict(leg=s.leg, imsi=s.imsi, msisdn=s.msisdn, imei=s.imei, apn=s.apn, ue_ipv4=s.ue_ipv4,
-                    ue_ipv6=s.ue_ipv6, rat=s.rat, status=s.status, last_ts=s.last_ts, **extra)
+                    ue_ipv6=s.ue_ipv6, rat=s.rat, status=s.status, last_ts=s.last_ts, pdn_type_req=s.pdn_type_req,
+                    req_src=s.req_src, del_initiator=s.del_initiator, del_msg=s.del_msg, del_req_frame=s.del_req_frame,
+                    **extra)
         self.con.execute(f"UPDATE gtp_sessions SET {', '.join(k + '=?' for k in cols)} WHERE id=?",
                          (*cols.values(), s.id))
 
@@ -375,6 +382,9 @@ class GtpcAnalyzer(Analyzer):
         s.imei = pkt.get("gtpv2.mei") or s.imei
         s.apn = pkt.get("gtpv2.apn") or s.apn
         s.rat = pkt.int("gtpv2.rat_type") or s.rat
+        s.pdn_type_req = pkt.int("gtpv2.pdn_type") or s.pdn_type_req
+        if s.req_src is None:
+            s.req_src = src
 
     def _ebis(self, pkt: Packet) -> list[int]:
         out = []
@@ -411,6 +421,8 @@ class GtpcAnalyzer(Analyzer):
             self._register_v2_fteids(s, pkt, src)
         if mt == 36:
             s.status = "deleting"
+        if mt in (36, 99) and (mt == 36 or s.del_initiator is None):
+            s.del_initiator, s.del_msg, s.del_req_frame = src, V2_MSG[mt], pkt.frame
         self._save(s)
 
     def _apply_v2_response(self, s: Session, pkt: Packet, req_mt: int, cause: int | None, src: str, dst: str,
@@ -442,6 +454,9 @@ class GtpcAnalyzer(Analyzer):
             for f in s.uplane:
                 if f.ebi in ebis:
                     self._close_u(f, pkt, "bearer deleted")
+            if s.uplane and all(f.valid_to is not None for f in s.uplane):  # last (default) bearer removed
+                self._end_session(s, pkt, "deleted")
+                return
         if req_mt == 170 and ok:  # Release Access Bearers: S1-U eNB tunnels released (ECM-IDLE)
             for f in s.uplane:
                 if f.iface_type in (0, 2):
@@ -485,10 +500,13 @@ class GtpcAnalyzer(Analyzer):
                 sess.msisdn = pkt.get("e164.msisdn") or sess.msisdn
                 sess.apn = pkt.get("gtp.apn") or sess.apn
                 sess.imei = pkt.get("gtp.ext_imeisv") or sess.imei
+                if sess.req_src is None:
+                    sess.req_src = src
                 if mt in (16, 18):
                     self._register_v1(sess, pkt, gsn, "downlink")
                 if mt == 20:
                     sess.status = "deleting"
+                    sess.del_initiator, sess.del_msg, sess.del_req_frame = src, V1_MSG[20], pkt.frame
                 self._save(sess)
             self._event(sess, pkt, data, "request" if not retrans else "retransmission", seq)
             return

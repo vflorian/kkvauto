@@ -178,6 +178,37 @@ A célgépen:
      csomaghivatkozásokkal és vizsgálati korlátokkal.
    * Külön blokkban: **Nyers capture-export** (maszkolatlan).
 
+## Forgalom nélküli sessionök, churn, Create Session-ráta (Session-egészség)
+
+Tipikus jegy: „X UTC-től megnőtt a forgalom nélküli data sessionök száma az APN-en. A
+Create Session-ök sikeresek, a sessionök röviddel utána bontanak, adatforgalom nélkül.
+Ellenőrizzétek az eszközöket.” Ezt a **SIM és session → Session-egészség** nézet vizsgálja
+APN-enként (modul: `analyzers/session_health.py`).
+
+| Kérdés | Mit mutat | Szabály / állapot |
+|---|---|---|
+| Mikor kezdődött? | Create Session/PDP ráta időben, a kezdőpont (változási pont) UTC-ben, előtte és utána mért ráta | `SESSION-RATE-INCREASE`, következtetett |
+| Valóban nincs forgalom? | sessiononként a hozzárendelt GTP-U csomagok UL/DL | `SESSION-NO-UPLANE`: *megfigyelt*, ha a session user-plane végpontjain más GTP-U látszik; *nem eldönthető*, ha a trace-ben nincs user plane (pl. csak S11/S5-C) |
+| Mennyi ideig élnek? | élettartam-hisztogram, rövid életű (< 60 s) sessionök | `SESSION-SHORT` |
+| Melyik IMSI-k, milyen ritmusban? | IMSI-lista pontszám szerint: session-szám, medián élettartam, **medián újrakapcsolódási idő** (újracsatlakozási hurok) | `SESSION-CHURN` |
+| Eszköz vagy hálózat? | ki küldte a bontó kérést: hozzáférési oldal (MME/SGSN → UE- vagy MME-kezdeményezés) vagy core (SGW/PGW/GGSN); eszköztípus IMEI TAC szerint | – |
+| Gyanús paraméter? | kért és kiosztott PDN-típus (pl. IPv4v6 kérés, csak IPv4 kiosztás), RAT | `PDN-TYPE-MISMATCH` |
+
+* **IMSI-lista az ügyfélnek vagy a szolgáltatónak:** a nézetben „IMSI-lista CSV/JSON”,
+  alapból maszkolva (MCC+MNC marad, pl. `90128xxxxxxxxxx [IMSI#1]`).
+* **Riport:** a megállapítások „+ incidens” gombbal kerülnek az angol riportba.
+* **Próba szintetikus adaton:**
+
+  ```powershell
+  .venv\Scripts\python.exe -m capscope.synth churn churn.pcapng
+  ```
+
+  A `churn-cp` változat csak control-plane-t tartalmaz; ezen látszik, hogy a „forgalom
+  nélkül” állítás ilyenkor nem eldönthető.
+* **Küszöbök** (`config.py`): rövid session < 60 s (`CAPSCOPE_SHORT_SESSION_S`), churn ≥ 3
+  session, ráta-ugrás ≥ 3×. A ráta időfelbontása 60 s; rövid capture-nél automatikusan
+  10 s vagy 1 s.
+
 ## Állapotok, szabályok, bizonyíték
 
 | Állapot | Jelentés |

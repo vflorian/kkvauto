@@ -479,6 +479,69 @@ def sessions(cid: int, q: str | None = None, field: str = "any", offset: int = 0
     return r
 
 
+@app.get("/api/captures/{cid}/session-health")
+def session_health(cid: int, apn: str | None = None, limit: int = Query(300, le=5000)) -> dict:
+    """Sessions without traffic / short-lived sessions / re-attach loops / Create Session rate per APN."""
+    service.require_capture(cid)
+    with capture_db(cid) as con:
+        have = con.execute("SELECT 1 FROM sqlite_master WHERE name='session_health'").fetchone()
+        if not have:
+            return {"available": False, "note": "Ez az index a session-egészség modul előtt készült. Indexeld újra."}
+        apns = rows(con.execute("""SELECT coalesce(apn,'(nincs APN)') apn, count(*) sessions, sum(accepted) accepted,
+              sum(status='rejected') rejected, sum(up_state='no_traffic') no_traffic,
+              sum(up_state='undetermined') up_undetermined, sum(up_state='traffic') with_traffic,
+              sum(short_lived) short_lived, sum(pdn_mismatch) pdn_mismatch, count(DISTINCT imsi) imsis
+              FROM session_health GROUP BY 1 ORDER BY sessions DESC"""))
+        if not apns:
+            return {"available": True, "apns": [], "note": "A capture-ben nincs GTP-C session."}
+        apn = apn if apn in [a["apn"] for a in apns] else apns[0]["apn"]
+        a = "coalesce(apn,'(nincs APN)') = ?"
+        rate = rows(con.execute("SELECT * FROM apn_rate WHERE apn=? ORDER BY bucket", (apn,)))
+        onset = con.execute("SELECT * FROM apn_onset WHERE apn=?", (apn,)).fetchone()
+        hist = rows(con.execute(f"""SELECT CASE
+              WHEN NOT accepted THEN 'létre sem jött'
+              WHEN duration_ns IS NULL THEN 'capture végén nyitott'
+              WHEN duration_ns < 5e9 THEN '< 5 s' WHEN duration_ns < 30e9 THEN '5–30 s'
+              WHEN duration_ns < 60e9 THEN '30–60 s' WHEN duration_ns < 300e9 THEN '1–5 perc'
+              WHEN duration_ns < 1800e9 THEN '5–30 perc' ELSE '> 30 perc' END bucket,
+              count(*) n, sum(up_state='no_traffic') no_traffic, sum(up_state='undetermined') up_undetermined
+              FROM session_health WHERE {a} GROUP BY 1""", (apn,)))
+        order = ['< 5 s', '5–30 s', '30–60 s', '1–5 perc', '5–30 perc', '> 30 perc', 'capture végén nyitott',
+                 'létre sem jött']
+        hist.sort(key=lambda h: order.index(h["bucket"]))
+        dels = rows(con.execute(f"""SELECT coalesce(del_side,'–') side, coalesce(del_msg,'–') msg,
+              coalesce(del_initiator,'–') initiator, count(*) n FROM session_health WHERE {a} AND accepted
+              GROUP BY 1,2,3 ORDER BY n DESC""", (apn,)))
+        tacs = rows(con.execute(f"""SELECT coalesce(tac,'(nincs IMEI)') tac, count(*) sessions, count(DISTINCT imsi) imsis,
+              sum(up_state='no_traffic') no_traffic, sum(up_state='undetermined') up_undetermined,
+              sum(short_lived) short_lived, sum(pdn_mismatch) pdn_mismatch
+              FROM session_health WHERE {a} GROUP BY 1 ORDER BY sessions DESC LIMIT 30""", (apn,)))
+        pdn = rows(con.execute(f"""SELECT coalesce(pdn_req,'–') requested, coalesce(pdn_alloc,'–') allocated, count(*) n
+              FROM session_health WHERE {a} AND accepted GROUP BY 1,2 ORDER BY n DESC""", (apn,)))
+        rat = rows(con.execute(f"SELECT rat, count(*) n FROM session_health WHERE {a} GROUP BY 1 ORDER BY n DESC", (apn,)))
+        imsis = rows(con.execute("SELECT * FROM imsi_health WHERE coalesce(apn,'(nincs APN)')=? ORDER BY score DESC "
+                                 "LIMIT ?", (apn, limit)))
+        gtpu = con.execute("SELECT count(*) FROM gtpu_frames").fetchone()[0]
+        finds = rows(con.execute("SELECT * FROM findings WHERE analyzer='session_health' ORDER BY "
+                                 "CASE rule WHEN 'SESSION-RATE-INCREASE' THEN 0 WHEN 'SESSION-NO-UPLANE' THEN 1 ELSE 2 END, id "
+                                 "LIMIT 60"))
+    for r in rate:
+        r["utc"] = ts_iso(r["bucket"] * 1_000_000_000)
+    for i in imsis:
+        i["first_utc"], i["last_utc"] = ts_iso(i["first_ts"]), ts_iso(i["last_ts"])
+    for f in finds:
+        f["frames"] = json.loads(f["frames"] or "[]")
+        f["ts_utc"] = ts_iso(f["ts_ns"])
+    o = dict(onset) if onset else None
+    if o:
+        o["utc"] = ts_iso(o["onset_bucket"] * 1_000_000_000)
+    return {"available": True, "apn": apn, "apns": apns, "rate": rate, "onset": o, "duration_hist": hist,
+            "deletions": dels, "tacs": tacs, "pdn": pdn, "rat": rat, "imsis": imsis, "findings": finds,
+            "gtpu_packets": gtpu, "user_plane_visible": gtpu > 0,
+            "settings": {"short_session_s": settings.short_session_s, "rate_increase_factor": settings.rate_increase_factor,
+                         "churn_min_sessions": settings.churn_min_sessions}}
+
+
 @app.get("/api/captures/{cid}/sessions/{sid}")
 def session(cid: int, sid: int) -> dict:
     service.require_capture(cid)

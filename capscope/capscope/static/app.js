@@ -271,11 +271,102 @@ async function renderSim() {
     const q = el("input", { type: "text", id: "sim-q", placeholder: "IMSI, MSISDN, APN, kiosztott IP vagy TEID (0x… / decimális)", style: "flex:1" });
     const f = el("select", { id: "sim-f" }, ["any:Bármely", "imsi:IMSI", "msisdn:MSISDN", "apn:APN", "ip:Kiosztott / tunnel IP", "teid:TEID"].map(x => { const [v, t] = x.split(":"); return el("option", { value: v }, t); }));
     q.addEventListener("keydown", e => { if (e.key === "Enter") simSearch(); });
-    root.replaceChildren(el("div", { class: "toolbar" }, q, f, el("button", { class: "primary", onclick: simSearch }, "Keresés")),
-      el("div", { class: "note" }, "A GTP-U forgalom csak akkor kerül egy sessionhöz, ha a külső cél-IP (fogadó tunnelvégpont) + TEID egy, a GTP-C-ben ugyanannak a sessionnek jelzett user-plane F-TEID-del egyezik, és a csomag a session érvényességi ablakába esik. Azonos TEID más végponton vagy csak egyező IP nem elég. Több jelöltnél „nem eldönthető”."),
-      el("div", { id: "sim-list" }), el("div", { id: "sim-detail" }));
+    const sub = el("div", { class: "subtabs", id: "sim-sub" },
+      el("button", { "data-s": "search", onclick: () => { S.simSub = "search"; renderSim(); } }, "Keresés (IMSI, APN, IP, TEID)"),
+      el("button", { "data-s": "health", onclick: () => { S.simSub = "health"; renderSim(); } }, "Session-egészség (forgalom nélküli sessionök, churn, CSR-ráta)"));
+    root.replaceChildren(sub,
+      el("div", { id: "sim-search-pane" }, el("div", { class: "toolbar" }, q, f, el("button", { class: "primary", onclick: simSearch }, "Keresés")),
+        el("div", { class: "note" }, "A GTP-U forgalom csak akkor kerül egy sessionhöz, ha a külső cél-IP (fogadó tunnelvégpont) + TEID egy, a GTP-C-ben ugyanannak a sessionnek jelzett user-plane F-TEID-del egyezik, és a csomag a session érvényességi ablakába esik. Azonos TEID más végponton vagy csak egyező IP nem elég. Több jelöltnél „nem eldönthető”."),
+        el("div", { id: "sim-list" }), el("div", { id: "sim-detail" })),
+      el("div", { id: "sim-health-pane" }));
   }
-  simSearch();
+  const sub = S.simSub || "search";
+  document.querySelectorAll("#sim-sub button").forEach(b => b.classList.toggle("active", b.dataset.s === sub));
+  $("#sim-search-pane").style.display = sub === "search" ? "" : "none";
+  $("#sim-health-pane").style.display = sub === "health" ? "" : "none";
+  if (sub === "health") renderHealth(); else simSearch();
+}
+function searchImsi(imsi) {
+  S.simSub = "search"; renderSim(); $("#sim-q").value = imsi; $("#sim-f").value = "imsi"; simSearch();
+}
+async function renderHealth(apn) {
+  const pane = $("#sim-health-pane");
+  pane.replaceChildren(el("div", { class: "muted" }, "Betöltés…"));
+  const d = await api(`/api/captures/${S.cid}/session-health?${qs({ apn: apn || S.healthApn || "" })}`);
+  if (!d.available || !d.apns.length) { pane.replaceChildren(el("div", { class: "note" }, d.note || "Nincs adat.")); return; }
+  S.healthApn = d.apn;
+  const A = d.apns.find(x => x.apn === d.apn);
+  const pct = (a, b) => b ? ` (${(100 * a / b).toFixed(1)}%)` : "";
+  const apnSel = el("select", { onchange: e => renderHealth(e.target.value) }, d.apns.map(x => el("option", { value: x.apn, selected: x.apn === d.apn }, `${x.apn} – ${x.sessions} session`)));
+  const scope = d.user_plane_visible ? null : el("div", { class: "banner warn", style: "margin:0 0 10px" }, el("b", null, "A capture-ben nincs GTP-U (user plane). "),
+    "A „forgalom nélküli session” állítás ebből a trace-ből nem dönthető el – ezek a sessionök „nem eldönthető” állapotúak. A Create Session-ráta, a session-élettartam, az újrakapcsolódási hurok és a bontás kezdeményezője ettől még megállapítható. A forgalom igazolásához user-plane capture (S1-U/S5-U/Gn-U) vagy CDR/usage adat kell.");
+  const kpi = (t, v, cls) => el("div", { class: "card" }, el("div", { class: "small muted" }, t), el("div", { style: "font-size:20px;font-weight:600", class: cls || "" }, v));
+  const onset = d.onset ? el("div", { class: "note" }, el("b", null, `Kezdőpont (következtetett): ${utc(d.onset.utc)} UTC`),
+    ` – Create Session/PDP ráta ${d.onset.before_per_min.toFixed(1)}/perc → ${d.onset.after_per_min.toFixed(1)}/perc (${d.onset.ratio.toFixed(1)}×). `,
+    d.onset.after_no_traffic_ratio !== null ? `Forgalom nélküli / nem eldönthető arány: előtte ${fmtPct(d.onset.before_no_traffic_ratio)}, utána ${fmtPct(d.onset.after_no_traffic_ratio)}. ` : "",
+    el("span", { class: "muted" }, `Változási pont, ${d.onset.width} s-os felbontás; a capture előtti időszak nem ismert.`), " ", el("button", { onclick: () => { S.twin = { t0: `${d.onset.onset_bucket}000000000`, t1: `${d.onset.onset_bucket + 300}000000000`, label: `${utc(d.onset.utc)} UTC + 5 perc` }; S.page = null; showTab("packets"); } }, "Csomagok a kezdőponttól (5 perc)"))
+    : el("div", { class: "note" }, `Nem található ${d.settings.rate_increase_factor}×-os vagy nagyobb ráta-ugrás ezen az APN-en a capture időtartamán belül.`);
+  const fx = d.findings.filter(f => f.rule !== "SESSION-CHURN");
+  pane.replaceChildren(...[
+    el("div", { class: "toolbar" }, el("b", null, "APN"), apnSel, el("span", { class: "grow" }), exportBtns("imsi_health"), el("span", { class: "small muted" }, "← IMSI-lista"), exportBtns("session_health"), el("span", { class: "small muted" }, "← sessionök")),
+    scope,
+    el("div", { class: "grid" },
+      kpi("Session (Create Session/PDP)", `${fmtN(A.sessions)} · ${fmtN(A.imsis)} IMSI`),
+      kpi("Létrejött / elutasítva", `${fmtN(A.accepted)} / ${fmtN(A.rejected)}`, A.rejected ? "noresp" : ""),
+      kpi("Forgalom nélkül (megfigyelt)", `${fmtN(A.no_traffic)}${pct(A.no_traffic, A.accepted)}`, A.no_traffic ? "noresp" : ""),
+      kpi("Forgalom nem eldönthető", `${fmtN(A.up_undetermined)}${pct(A.up_undetermined, A.accepted)}`),
+      kpi(`Rövid életű (< ${d.settings.short_session_s} s)`, `${fmtN(A.short_lived)}${pct(A.short_lived, A.accepted)}`, A.short_lived ? "noresp" : ""),
+      kpi("Kért ≠ kiosztott PDN-típus", fmtN(A.pdn_mismatch))),
+    onset,
+    el("div", { class: "card" }, el("h3", null, "Create Session/PDP ráta (UTC) – piros: forgalom nélkül / nem eldönthető, kék: forgalommal, szürke: elutasítva"), healthChart(d.rate, d.onset)),
+    el("div", { class: "grid" },
+      el("div", { class: "card" }, el("h3", null, "Session-élettartam"), table([{ t: "Időtartam", k: "bucket" }, { t: "Session", num: true, f: r => fmtN(r.n) }, { t: "Forgalom nélkül / n.e.", num: true, f: r => `${fmtN(r.no_traffic)} / ${fmtN(r.up_undetermined)}` }], d.duration_hist)),
+      el("div", { class: "card" }, el("h3", null, "Ki bontotta? (bontó kérés küldője)"), table([
+        { t: "Oldal", f: r => ({ access: "hozzáférési (MME/SGSN – UE vagy MME kezdeményezte)", core: "core (SGW/PGW/GGSN kezdeményezte)" }[r.side] || "nem bontott / nem látszik") },
+        { t: "Üzenet", k: "msg" }, { t: "Küldő", k: "initiator", mono: true }, { t: "Session", num: true, f: r => fmtN(r.n) }], d.deletions)),
+      el("div", { class: "card" }, el("h3", null, "PDN-típus: kért → kiosztott"), table([{ t: "Kért", k: "requested" }, { t: "Kiosztott", k: "allocated" }, { t: "Session", num: true, f: r => fmtN(r.n) }], d.pdn)),
+      el("div", { class: "card" }, el("h3", null, "Eszköztípus (IMEI TAC)"), table([{ t: "TAC", k: "tac", mono: true }, { t: "IMSI", num: true, k: "imsis" }, { t: "Session", num: true, f: r => fmtN(r.sessions) },
+        { t: "Rövid", num: true, f: r => fmtN(r.short_lived) }, { t: "Forg. nélkül / n.e.", num: true, f: r => `${fmtN(r.no_traffic)} / ${fmtN(r.up_undetermined)}` }], d.tacs))),
+    fx.length ? el("div", { class: "card" }, el("h3", null, "Megállapítások"), table([{ t: "Állapot", f: x => stateChip(x.state, x.rule) }, { t: "Megállapítás", f: x => [el("b", null, x.title), el("div", { class: "small muted" }, x.detail)] }, { t: "Bizonyíték", f: x => framesLinks(x.frames, 5) }, { t: "", f: x => incBtn("finding", { ref_id: x.id }) }], fx)) : null,
+    el("div", { class: "card" }, el("h3", null, `Érintett IMSI-k (pontszám szerint: rövid + forgalom nélküli sessionök) – ${d.imsis.length} sor`),
+      el("div", { class: "scroll", style: "max-height:420px" }, table([
+        { t: "IMSI", mono: true, f: r => el("button", { class: "link mono", onclick: () => searchImsi(r.imsi) }, r.imsi) }, { t: "TAC", k: "tac", mono: true },
+        { t: "Session", num: true, k: "sessions" }, { t: "Rövid", num: true, k: "short_lived" },
+        { t: "Forgalom nélkül / n.e. / forgalommal", num: true, f: r => `${r.no_traffic} / ${r.up_undetermined} / ${r.with_traffic}` },
+        { t: "Elutasítva", num: true, k: "rejected" },
+        { t: "Medián élettartam", num: true, f: r => r.median_duration_ns !== null ? `${(r.median_duration_ns / 1e9).toFixed(1)} s` : "–" },
+        { t: "Medián újrakapcsolódás", num: true, f: r => r.median_gap_ns !== null ? `${(r.median_gap_ns / 1e9).toFixed(1)} s` : "–" },
+        { t: "Bontás: hozzáf. / core", num: true, f: r => `${r.del_access} / ${r.del_core}` },
+        { t: "Első / utolsó (UTC)", mono: true, f: r => `${utc(r.first_utc).slice(11, 19)} – ${utc(r.last_utc).slice(11, 19)}` },
+        { t: "", f: r => frameLink(r.first_frame, "első CSR") },
+      ], d.imsis))),
+    el("div", { class: "note" }, "Szabályok: SESSION-NO-UPLANE (megfigyelt csak akkor, ha a session user-plane végpontjain más GTP-U látszik), SESSION-SHORT, SESSION-CHURN, SESSION-RATE-INCREASE (változási pont, következtetett), PDN-TYPE-MISMATCH. A bontás oldalát a bontó kérés küldőjének és a Create Session küldőjének összevetése adja. A „forgalom nélkül” mindig a vizsgált capture-re vonatkozik.")].filter(Boolean));
+}
+function fmtPct(x) { return x === null || x === undefined ? "–" : `${(x * 100).toFixed(0)}%`; }
+function healthChart(rate, onset) {
+  const W = 1000, H = 170, pad = 30, NS = "http://www.w3.org/2000/svg";
+  if (!rate.length) return el("div", { class: "muted" }, "Nincs adat");
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${W} ${H}`); svg.setAttribute("class", "svgchart"); svg.setAttribute("preserveAspectRatio", "none");
+  const t0 = rate[0].bucket, w = rate[0].width, n = Math.max(1, (rate[rate.length - 1].bucket - t0) / w + 1);
+  const max = Math.max(...rate.map(r => r.created)), bw = (W - pad) / n;
+  const rect = (x, y, h, color, title) => { const r = document.createElementNS(NS, "rect"); r.setAttribute("x", x); r.setAttribute("y", y); r.setAttribute("width", Math.max(1, bw - 1)); r.setAttribute("height", Math.max(0, h)); r.setAttribute("fill", color); const t = document.createElementNS(NS, "title"); t.textContent = title; r.append(t); svg.append(r); };
+  for (const r of rate) {
+    const i = (r.bucket - t0) / w, x = pad + i * bw, sc = (H - 30) / max;
+    const empty = r.no_traffic + r.up_undetermined, rej = r.rejected, ok = Math.max(0, r.created - empty - rej);
+    const title = `${utc(r.utc)} UTC (+${w} s): ${r.created} session, ${empty} forgalom nélkül/n.e., ${rej} elutasítva, ${r.imsis} IMSI`;
+    let y = H - 16;
+    for (const [v, c] of [[ok, "#1f6feb"], [empty, "#cf222e"], [rej, "#8c959f"]]) { const h = v * sc; y -= h; rect(x, y, h, c, title); }
+  }
+  if (onset) {
+    const x = pad + (onset.onset_bucket - t0) / w * bw;
+    const l = document.createElementNS(NS, "line"); l.setAttribute("x1", x); l.setAttribute("x2", x); l.setAttribute("y1", 0); l.setAttribute("y2", H - 14); l.setAttribute("stroke", "#9a6700"); l.setAttribute("stroke-dasharray", "4 3"); svg.append(l);
+    const t = document.createElementNS(NS, "text"); t.setAttribute("x", x + 4); t.setAttribute("y", 12); t.textContent = `kezdet ${utc(onset.utc).slice(11, 19)}`; svg.append(t);
+  }
+  const lab = (x, txt, anchor) => { const t = document.createElementNS(NS, "text"); t.setAttribute("x", x); t.setAttribute("y", H - 3); t.setAttribute("text-anchor", anchor); t.textContent = txt; svg.append(t); };
+  lab(pad, utc(rate[0].utc).slice(11, 19), "start"); lab(W, utc(rate[rate.length - 1].utc).slice(11, 19), "end");
+  const m = document.createElementNS(NS, "text"); m.setAttribute("x", 2); m.setAttribute("y", 24); m.textContent = `max ${max}/${w}s`; svg.append(m);
+  return svg;
 }
 async function simSearch() {
   const q = $("#sim-q").value.trim(), field = $("#sim-f").value;

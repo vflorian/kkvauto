@@ -542,9 +542,84 @@ def generate_large(path: str, packets: int, seed: int = 1) -> dict:
     return {"path": path, "packets": n, "bytes": os.path.getsize(path)}
 
 
+def generate_churn(path: str, *, control_plane_only: bool = False, minutes: int = 60, onset_min: int = 30,
+                   bad_devices: int = 30, seed: int = 7, apn: str = "iot.example.nl") -> dict:
+    """Reproduce a 'sessions without traffic' ticket on S11 (+ S1-U unless control_plane_only).
+
+    * baseline: well-behaved devices (TAC 86123401, PDN type IPv4) attach, send traffic, stay or detach
+      after minutes – about one Create Session per minute;
+    * from ``onset_min``: ``bad_devices`` IMSIs (TAC 35999901, request IPv4v6, get IPv4 with cause 18)
+      loop: Create Session -> accepted -> Modify Bearer -> 2-4 s -> Delete Session from the MME,
+      no user-plane traffic, re-attach after 20-40 s.
+    Synthetic identifiers only (IMSI 90128800…/90128890…)."""
+    import random
+    rnd = random.Random(seed)
+    t0 = 1_763_186_400 * 1_000_000_000  # 2025-11-15 06:00:00 UTC
+    ev: list[tuple[int, bytes]] = []
+    mme, sgw_c, sgw_u = "10.0.0.1", "10.0.0.2", "10.0.1.2"
+    st = {"seq": 1, "teid": 0x100}
+
+    def nxt() -> int:
+        st["teid"] += 1
+        return st["teid"]
+
+    def session(t: int, imsi: str, imei: str, pdn: int, ue_ip: str, enb: str, life_ns: int | None,
+                traffic: bool, alloc_cause: int = 16) -> None:
+        seq = st["seq"]
+        st["seq"] += 3
+        mt, gt, ut, et = nxt(), nxt(), nxt(), nxt()
+        csr = (v2_imsi(imsi) + v2_ie(75, tbcd(imei)) + v2_rat(6) + v2_fteid(IF_S11_MME, mt, mme) + v2_apn(apn)
+               + v2_ie(99, bytes([pdn])) + v2_bearer_ctx(v2_ebi(5)))
+        rsp = (v2_cause(alloc_cause) + v2_fteid(IF_S11_SGW, gt, sgw_c) + v2_paa_v4(ue_ip)
+               + v2_bearer_ctx(v2_ebi(5), v2_cause(16), v2_fteid(IF_S1U_SGW, ut, sgw_u)))
+        c = lambda a, b, m, sq, ies, teid: eth_ip(a, b, 17, udp(2123, 2123, gtpv2(m, sq, ies, teid)))
+        ev.append((t, c(mme, sgw_c, 32, seq, csr, 0)))
+        ev.append((t + 15_000_000, c(sgw_c, mme, 33, seq, rsp, mt)))
+        ev.append((t + 80_000_000, c(mme, sgw_c, 34, seq + 1, v2_bearer_ctx(v2_ebi(5), v2_fteid(IF_S1U_ENB, et, enb)), gt)))
+        ev.append((t + 85_000_000, c(sgw_c, mme, 35, seq + 1, v2_cause(16), mt)))
+        end = t + life_ns if life_ns else t0 + minutes * 60_000_000_000
+        if traffic and not control_plane_only:
+            tt = t + 500_000_000
+            while tt < end - 1_000_000_000:
+                inner = inner_udp(ue_ip, "198.51.100.10", 40000, 5683, b"telemetry" * 4)
+                ev.append((tt, eth_ip(enb, sgw_u, 17, udp(2152, 2152, gtpu(ut, inner)))))
+                inner = inner_udp("198.51.100.10", ue_ip, 5683, 40000, b"ack")
+                ev.append((tt + 40_000_000, eth_ip(sgw_u, enb, 17, udp(2152, 2152, gtpu(et, inner)))))
+                tt += rnd.randint(15, 25) * 1_000_000_000
+        if life_ns:
+            ev.append((end, c(mme, sgw_c, 36, seq + 2, v2_ebi(5), gt)))
+            ev.append((end + 4_000_000, c(sgw_c, mme, 37, seq + 2, v2_cause(16), mt)))
+
+    horizon = t0 + minutes * 60_000_000_000
+    # baseline: ~1 Create Session per minute, long-lived sessions with traffic
+    k = 0
+    t = t0 + 5_000_000_000
+    while t < horizon - 60_000_000_000:
+        k += 1
+        life = rnd.randint(5, 15) * 60_000_000_000
+        session(t, f"90128890{k:07d}", f"86123401{k:07d}0", 1, f"100.70.{k // 250}.{k % 250 + 1}",
+                f"10.0.2.{k % 50 + 1}", life if t + life < horizon else None, True)
+        t += rnd.randint(40, 80) * 1_000_000_000
+    # faulty devices from the onset: create -> delete after 2-4 s, no traffic, re-attach 20-40 s later
+    for d in range(bad_devices):
+        t = t0 + onset_min * 60_000_000_000 + rnd.randint(0, 30_000) * 1_000_000
+        while t < horizon - 10_000_000_000:
+            session(t, f"90128800{d:07d}", f"35999901{d:07d}0", 3, f"100.80.{d // 250}.{d % 250 + 1}",
+                    f"10.0.3.{d % 50 + 1}", rnd.randint(2_000, 4_000) * 1_000_000, False, alloc_cause=18)
+            t += rnd.randint(20, 40) * 1_000_000_000 + 4_000_000_000
+    ev.sort(key=lambda e: e[0])
+    w = PcapngWriter(path, "CapScope synthetic: sessions without traffic"
+                     + (" (control plane only)" if control_plane_only else ""))
+    w.add_interface("s11-s1u" if not control_plane_only else "s11", tsresol=6)
+    for ts, data in ev:
+        w.write(ts, data)
+    w.close()
+    return {"path": path, "packets": len(ev), "onset_utc": "2025-11-15 06:%02d:00" % onset_min}
+
+
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description="CapScope synthetic capture generator")
-    ap.add_argument("kind", choices=["demo", "large"])
+    ap.add_argument("kind", choices=["demo", "large", "churn", "churn-cp"])
     ap.add_argument("out")
     ap.add_argument("--packets", type=int, default=1_000_000)
     ap.add_argument("--format", choices=["pcap", "pcapng"], default=None)
@@ -558,6 +633,8 @@ def main(argv: list[str] | None = None) -> None:
         else:
             sc.write(a.out, "pcap")
         print(f"{a.out}: {len(sc.frames)} frames")
+    elif a.kind in ("churn", "churn-cp"):
+        print(generate_churn(a.out, control_plane_only=a.kind == "churn-cp"))
     else:
         print(generate_large(a.out, a.packets))
 
